@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="GPT Image Viewer icon">
+  <defs>
+    <linearGradient id="bg" x1="20" y1="20" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#0891b2"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="96" height="96" rx="24" fill="url(#bg)"/>
+  <rect x="31" y="29" width="66" height="58" rx="9" fill="#f8fafc"/>
+  <rect x="39" y="37" width="50" height="31" rx="5" fill="#dff7ff"/>
+  <circle cx="78" cy="47" r="6" fill="#facc15"/>
+  <path d="M42 67l15-16 10 11 7-7 12 12H42z" fill="#2563eb"/>
+  <path d="M39 67l15-18 13 18H39z" fill="#14b8a6"/>
+  <rect x="41" y="76" width="32" height="4" rx="2" fill="#64748b"/>
+  <rect x="41" y="83" width="22" height="4" rx="2" fill="#94a3b8"/>
+  <circle cx="86" cy="84" r="18" fill="#0f172a" fill-opacity="0.18"/>
+  <circle cx="82" cy="80" r="13" fill="none" stroke="#ffffff" stroke-width="7"/>
+  <path d="M91 89l13 13" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/>
+</svg>
