@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GPT Image Metadata</title>
+    <link rel="stylesheet" href="./panel.css" />
+  </head>
+  <body>
+    <main id="app">
+      <header class="topbar">
+        <div>
+          <h1>GPT Image Metadata</h1>
+          <p id="status" class="status">Waiting for ChatGPT network activity</p>
+        </div>
+        <div class="summary" aria-live="polite">
+          <span id="item-count">0</span>
+          <span>captured</span>
+        </div>
+      </header>
+
+      <section class="toolbar" aria-label="Panel actions">
+        <button id="rescan" type="button">Rescan</button>
+        <button id="clear" type="button">Clear</button>
+        <button id="export-selected" type="button" disabled>Export selected</button>
+        <button id="export-all" type="button" disabled>Export all</button>
+      </section>
+
+      <section id="list" class="list" aria-label="Captured metadata"></section>
+    </main>
+    <script type="module" src="./panel.ts"></script>
+  </body>
+</html>

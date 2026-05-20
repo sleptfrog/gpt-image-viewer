@@ -1,0 +1,37 @@
+{
+  "items": [
+    {
+      "id": "s_sanitized_1",
+      "kind": "media_generation",
+      "generation_id": "s_sanitized_1",
+      "generation_type": "image_gen",
+      "url": "https://chatgpt.com/backend-api/estuary/content?id=file_recent_image_1&cp=pri&ma=90000&ts=12345&p=igh&cid=1&sig=redacted-image-sig&v=0",
+      "width": 1448,
+      "height": 1086,
+      "prompt": null,
+      "recreation_prompt": "A sanitized recent image prompt.",
+      "title": "Sanitized recent image",
+      "encodings": {
+        "thumbnail": {
+          "path": "https://chatgpt.com/backend-api/estuary/content?id=thumb%23file_recent_image_1%23thumbnail&cp=pri&ma=90000&ts=12345&p=igh&cid=1&sig=redacted-thumb-sig&v=0"
+        }
+      },
+      "asset_pointer": "sediment://file_recent_image_1",
+      "conversation_id": "conv_recent_sanitized",
+      "message_id": "message_recent_1",
+      "created_at": 1700000200
+    },
+    {
+      "id": "s_sanitized_2",
+      "kind": "media_generation",
+      "generation_type": "image_gen",
+      "url": "https://chatgpt.com/backend-api/estuary/content?id=file_recent_image_2&cp=pri&ma=90000&ts=12345&p=igh&cid=1&sig=redacted-image-sig-2&v=0",
+      "title": "URL only recent image",
+      "encodings": {},
+      "conversation_id": "conv_recent_sanitized",
+      "message_id": "message_recent_2",
+      "created_at": 1700000300
+    }
+  ],
+  "cursor": "sanitized-next-cursor"
+}

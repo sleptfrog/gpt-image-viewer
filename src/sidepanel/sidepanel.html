@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GPT Image Viewer</title>
+    <link rel="stylesheet" href="./sidepanel.css" />
+  </head>
+  <body>
+    <main id="app">
+      <header class="topbar">
+        <div class="title-block">
+          <h1>GPT Image Viewer</h1>
+          <p id="status" class="status">現在のチャットを読み込み中</p>
+        </div>
+        <div class="counter" aria-live="polite">
+          <span id="item-count">0</span>
+          <span>枚</span>
+        </div>
+      </header>
+
+      <section class="toolbar" aria-label="操作">
+        <button id="refresh" type="button">更新</button>
+        <button id="selection-toggle" type="button" disabled>全選択</button>
+        <button id="download-selected" type="button" disabled>選択した画像を保存</button>
+        <details id="more-actions" class="toolbar-menu">
+          <summary aria-label="その他の操作" title="その他の操作">⋮</summary>
+          <div class="toolbar-menu-panel">
+            <button id="export-json" type="button" disabled>メタデータJSONを書き出し</button>
+            <button id="export-dictionary" type="button">辞書を書き出し</button>
+            <button id="import-dictionary" type="button">辞書を読み込み</button>
+            <button id="clear-dictionary" type="button">辞書を全削除</button>
+          </div>
+        </details>
+        <input id="dictionary-file" type="file" accept="application/json,.json" hidden />
+      </section>
+
+      <section id="download-progress" class="download-progress" aria-live="polite" hidden>
+        <div class="download-progress-row">
+          <span id="download-progress-label">準備中</span>
+          <span id="download-progress-count"></span>
+        </div>
+        <progress id="download-progress-bar" value="0" max="1"></progress>
+      </section>
+
+      <section class="conversation">
+        <span class="conversation-label">チャット</span>
+        <span id="conversation-id" class="conversation-id">-</span>
+      </section>
+
+      <section id="content" class="content" aria-label="画像一覧"></section>
+    </main>
+
+    <dialog id="clear-dictionary-dialog" class="confirm-dialog" aria-labelledby="clear-dictionary-title">
+      <form method="dialog" class="confirm-dialog-panel">
+        <h2 id="clear-dictionary-title">辞書を全削除しますか？</h2>
+        <p>
+          このブラウザセッションに保存された画像URL辞書を削除します。チャットのメタデータは残りますが、
+          辞書にしかURLがない画像は画像未取得の表示になります。
+        </p>
+        <div class="confirm-dialog-actions">
+          <button id="cancel-clear-dictionary" type="submit" value="cancel">キャンセル</button>
+          <button id="confirm-clear-dictionary" type="submit" value="confirm">全削除</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="download-all-dialog" class="confirm-dialog" aria-labelledby="download-all-title">
+      <form method="dialog" class="confirm-dialog-panel">
+        <h2 id="download-all-title">保存しますか？</h2>
+        <p id="download-all-message">
+          選択した画像をZIPファイルとして保存します。画像未取得の項目はスキップされます。
+        </p>
+        <div class="confirm-dialog-actions">
+          <button type="submit" value="cancel">キャンセル</button>
+          <button id="confirm-download-all" type="submit" value="confirm">ZIPを保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="viewer-dialog" class="viewer-dialog" aria-labelledby="viewer-title">
+      <div class="viewer-shell">
+        <header class="viewer-header">
+          <div class="viewer-title-block">
+            <h2 id="viewer-title">画像ビューア</h2>
+            <p id="viewer-position" class="viewer-position">-</p>
+          </div>
+          <button id="viewer-close" class="viewer-icon-button" type="button" aria-label="ビューアを閉じる">&times;</button>
+        </header>
+
+        <section class="viewer-stage" aria-label="画像プレビュー">
+          <button id="viewer-prev-edge" class="viewer-edge viewer-edge-left" type="button" aria-label="前の画像"></button>
+          <figure class="viewer-figure">
+            <img id="viewer-image" alt="ChatGPT生成画像" />
+            <figcaption id="viewer-image-status" class="viewer-image-status" hidden></figcaption>
+          </figure>
+          <button id="viewer-next-edge" class="viewer-edge viewer-edge-right" type="button" aria-label="次の画像"></button>
+          <button id="viewer-prev" class="viewer-nav viewer-nav-left" type="button" aria-label="前の画像">‹</button>
+          <button id="viewer-next" class="viewer-nav viewer-nav-right" type="button" aria-label="次の画像">›</button>
+        </section>
+
+        <section class="viewer-details" aria-label="画像メタデータ">
+          <div class="viewer-actions">
+            <button id="viewer-download" type="button">保存</button>
+            <button id="viewer-copy-image" type="button">画像をコピー</button>
+          </div>
+
+          <div class="viewer-meta-line">
+            <span id="viewer-image-id"></span>
+            <time id="viewer-created-at"></time>
+          </div>
+
+          <section class="viewer-text-section" aria-labelledby="viewer-caption-label">
+            <div class="viewer-text-heading">
+              <h3 id="viewer-caption-label">キャプション</h3>
+              <button id="viewer-copy-caption" class="viewer-copy-text" type="button" aria-label="キャプションをコピー">コピー</button>
+            </div>
+            <p id="viewer-caption" class="viewer-full-text"></p>
+          </section>
+
+          <section class="viewer-text-section" aria-labelledby="viewer-prompt-label">
+            <div class="viewer-text-heading">
+              <h3 id="viewer-prompt-label">プロンプト</h3>
+              <button id="viewer-copy-prompt" class="viewer-copy-text" type="button" aria-label="プロンプトをコピー">コピー</button>
+            </div>
+            <p id="viewer-prompt" class="viewer-full-text"></p>
+          </section>
+        </section>
+      </div>
+    </dialog>
+    <script type="module" src="./sidepanel.ts"></script>
+  </body>
+</html>

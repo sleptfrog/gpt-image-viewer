@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "GPT Image Viewer",
+  "version": "0.1.0",
+  "description": "Capture and review ChatGPT image metadata locally.",
+  "action": {
+    "default_title": "GPT Image Viewer"
+  },
+  "background": {
+    "service_worker": "assets/background.js",
+    "type": "module"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://chatgpt.com https://chat.openai.com; img-src 'self' https://chatgpt.com https://chat.openai.com data: blob;"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": ["content-script.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": ["page-hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ],
+  "devtools_page": "src/devtools/devtools.html",
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*"
+  ],
+  "permissions": [
+    "clipboardWrite",
+    "downloads",
+    "sidePanel",
+    "scripting",
+    "storage"
+  ],
+  "side_panel": {
+    "default_path": "src/sidepanel/sidepanel.html"
+  },
+  "minimum_chrome_version": "116"
+}

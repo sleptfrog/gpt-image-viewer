@@ -1,107 +1,175 @@
 # AGENTS.md
 
-This file is the first-read project brief for AI coding agents working on this repository.
+このファイルは、このリポジトリで作業するAI coding agent向けの最初に読む作業ガイドです。
 
-## Project Summary
+## プロジェクト概要
 
-Build a personal Chrome extension that helps save images generated in the ChatGPT web UI together with useful metadata found in the page/network data, such as the detailed image prompt, revised prompt, caption, message id, conversation id, image URL, and creation time when available.
+GPT Image Viewer は、ChatGPT Web UIで生成された画像を、プロンプト・キャプション・message ID・conversation ID・image ID・作成日時などのメタデータと一緒にローカル保存するための個人用Chrome拡張機能です。
 
-The main user goal is:
+最終的な利用イメージ:
 
-- Use ChatGPT normally in Chrome on Windows.
-- When an image is generated, save the image locally.
-- Embed prompt/caption metadata into the saved image file when practical.
-- Also support saving a sidecar JSON metadata file as a fallback or debug output.
+- ユーザーはGoogle Chromeで通常通りChatGPTを使う。
+- 拡張機能ボタンからChrome Side Panelを開く。
+- 現在のチャットに含まれる生成画像を一覧・閲覧する。
+- 必要な画像を選択し、メタデータ付きで保存する。
+- 画像へメタデータを埋め込めない場合は、sidecar JSONを同梱する。
 
-This project is intended for the user's own browser session and own ChatGPT conversations. Keep the design local-first, transparent, and conservative with permissions.
+このプロジェクトはユーザー本人のブラウザセッションと本人のChatGPT会話を対象にしたローカルファーストのツールです。外部送信を前提にしないでください。
 
-## User Environment
+## 開発・利用環境
 
-- Primary machine: Windows.
-- Development machine: local Ubuntu server.
-- Normal workflow: edit and build on Ubuntu through SSH / remote IDE.
-- Browser verification: Windows Chrome.
-- Preferred environment split:
-    - Ubuntu owns source code, Git, Node.js, package manager, tests, and build tools.
-    - Windows Chrome loads the built unpacked extension from a Windows-readable `dist` directory.
+- 利用対象ブラウザ: Google Chrome
+- 開発にはNode.js/npmを使う
+- `npm run build` で生成される `dist/` をChromeのunpacked extensionとして読み込める
+- 利用者側にNode.jsを要求しない配布を優先する
+- Docker前提にしない
 
-Do not assume Docker exists on Windows. Avoid requiring Windows-side Node.js unless there is a strong reason.
+## 現在のプロダクト状態
 
-## Recommended Development Workflow
+現在の主UIはChrome Side Panelです。ChatGPTページへ見えるボタンやパネルを直接埋め込む方針ではありません。
 
-1. Develop on Ubuntu.
-2. Build the extension into `dist/`.
-3. Sync or copy `dist/` to a Windows folder.
-4. Open `chrome://extensions` on Windows Chrome.
-5. Enable Developer Mode.
-6. Load the Windows-side `dist/` folder as an unpacked extension.
-7. After each build, reload the extension and reload the ChatGPT tab.
+実装済み:
 
-If the repository later adds scripts, document the exact build/sync commands here.
+- Manifest V3 Chrome拡張
+- DevTools panelによるPhase 1プロトタイプ
+- Side Panel UI
+- ChatGPT会話レスポンスのpage-world hook取得
+- `/backend-api/my/recent/image_gen` レスポンスからの画像URL辞書取り込み
+- チャットDOM上の表示済み画像URLスキャン
+- 画像URL辞書のsession storage保存
+- 画像URL辞書のインポート/エクスポート/全削除
+- 画像一覧、選択チェック、全選択/全選択解除
+- 選択画像のZIP保存
+- 単体画像保存
+- PNG/JPEG/WebPへのメタデータ埋め込み
+- 埋め込み失敗時のsidecar JSON
+- サイドパネル内画像ビューア
+- 画像コピー、caption/promptコピー
+- 日本語UI
 
-## Product Direction
+画像URLがまだ辞書にない項目は、UI上では「画像未取得」と表示します。この場合はChatGPTの「画像」ページを開き、対象画像が読み込まれるまでスクロールすることでURL辞書に取り込めます。
 
-Start with a low-risk prototype before building the polished page overlay UX.
+## 開発コマンド
 
-### Phase 1: DevTools Prototype
+```bash
+npm install
+npm test
+npm run build
+npm run package
+npm run typecheck
+```
 
-Build a DevTools extension first.
+追加で公開前チェックをする場合:
 
-Purpose:
+```bash
+npx tsc --noEmit --noUnusedLocals --noUnusedParameters
+npm audit --audit-level=moderate
+git diff --check
+```
 
-- Confirm which ChatGPT network responses contain image metadata.
-- Capture response bodies using `chrome.devtools.network`.
-- Parse candidate JSON responses into normalized image metadata records.
-- Export metadata as JSON.
-- Optionally download the corresponding image without embedded metadata yet.
+通常ビルドではsourcemapを生成しません。拡張機能のデバッグでsourcemapが必要な場合だけ `npm run build:debug` を使ってください。
 
-Why this phase matters:
+## Chromeでの確認手順
 
-- It matches the user's current manual investigation flow in Chrome DevTools.
-- `chrome.devtools.network` can access request information shown in DevTools Network, and `request.getContent()` can retrieve the response body.
-- This avoids premature assumptions about ChatGPT's internal response format.
+1. `npm run build` を実行する。
+2. Chromeで `chrome://extensions` を開く。
+3. Developer Modeを有効にする。
+4. `dist/` をunpacked extensionとして読み込む。
+5. 変更後は拡張機能をリロードし、ChatGPTタブも再読み込みする。
 
-Expected Phase 1 components:
+## 配布状態
 
-- `manifest.json` with Manifest V3 and `devtools_page`.
-- DevTools page.
-- Optional DevTools panel.
-- Network collector.
-- Metadata parser with fixtures/tests.
-- Simple export/download action.
+- 現在はChrome Web Store未公開。
+- READMEには、現時点で利用可能な方法として、リポジトリをビルドしてunpacked extensionとして読み込む手順だけを書く。
+- Chrome Web Store提出用ZIPは `npm run package` で `release/` に作成する。
+- READMEへ配布者向けの提案や検討メモを書かない。READMEには利用者やリポジトリ閲覧者にとって確定済みの事実だけを書く。
 
-### Phase 2: Normal Extension UX
+## リポジトリ構成
 
-After Phase 1 proves the data shape, build a normal extension experience on the ChatGPT page.
+```text
+.
+├── public/
+│   ├── manifest.json
+│   ├── content-script.js
+│   └── page-hook.js
+├── src/
+│   ├── background/service-worker.ts
+│   ├── devtools/
+│   ├── metadata/
+│   ├── shared/
+│   └── sidepanel/
+├── tests/
+│   ├── fixtures/
+│   ├── metadata/
+│   └── shared/
+├── README.md
+├── AGENTS.md
+├── package.json
+├── tsconfig.json
+└── vite.config.ts
+```
 
-Purpose:
+`dist/` と `release/` は生成物でGit管理外です。
 
-- Add a save button near generated images in the ChatGPT UI.
-- Associate visible images with parsed metadata.
-- Save images with embedded metadata when possible.
-- Save sidecar JSON when embedding is unavailable or disabled.
+## アーキテクチャ
 
-Likely components:
+### Page hook
 
-- Content script for DOM observation and UI injection.
-- Page-world injected script for observing `fetch` / `XMLHttpRequest` responses if needed.
-- Background service worker for privileged extension work.
-- Downloads API integration.
-- Options page for filename rules, metadata fields, and output format.
+`public/page-hook.js` はChatGPTページのMAIN worldで `fetch` と `XMLHttpRequest` をラップし、対象レスポンスだけを `window.postMessage` でcontent scriptへ渡します。
 
-## Important Chrome Extension Facts
+対象:
 
-- Target Manifest V3.
-- Content scripts normally run in an isolated world. They can read and modify the DOM, but they do not share JavaScript variables with the page.
-- A content script can use only a limited set of extension APIs directly. Route privileged actions through the background service worker with message passing.
-- If page-level `fetch` / `XMLHttpRequest` observation is needed, use a page-world injected script or `world: "MAIN"` where appropriate, then communicate back using `window.postMessage` or DOM events.
-- Do not rely on `chrome.webRequest` for response body capture. Use DevTools APIs in Phase 1, or page-level observation in Phase 2.
-- Use `chrome.downloads` for saving files from the extension.
-- Treat `chrome.debugger` as a later fallback only. It is powerful but has heavier permission and UX implications.
+- `/backend-api/conversation/*`
+- `/backend-api/my/recent/image_gen`
 
-## Metadata Strategy
+認証ヘッダー、Cookie、トークンは収集しません。
 
-Preferred metadata model:
+### Content script
+
+`public/content-script.js` はpage hookから受け取ったレスポンス本文をbackground service workerへ渡します。
+
+### Background service worker
+
+`src/background/service-worker.ts` はレスポンスをパースし、以下を `chrome.storage.session` に保存します。
+
+- 会話ごとの正規化済み `ImageMetadata`
+- `file_*` ごとの画像URL辞書
+
+rawレスポンス本文は永続化しません。
+
+### Side Panel
+
+`src/sidepanel/` は通常利用するUIです。
+
+- 現在のChatGPTタブURLからconversation IDを判定
+- session storage内のメタデータを読み込み
+- 必要に応じて現在ページDOMの画像URLをスキャン
+- 画像未取得の項目には案内ラベルを表示
+- 選択画像をZIP保存
+- 画像ビューアを表示
+
+### Metadata parser
+
+`src/metadata/parse-chatgpt.ts` はconversation JSONの `mapping` を走査します。
+
+- `content_type: "code"` のJSON textから生成プロンプトを読む
+- tool messageの `image_asset_pointer` を読む
+- `metadata.image_gen_title` と `Model caption:` を読む
+- 同一 `imageId` の重複レコードを統合する
+
+`src/metadata/parse-recent-image-gen.ts` はChatGPTの「画像」ページで読み込まれるrecent image responseから画像URL辞書用レコードを抽出します。
+
+### Metadata embedding
+
+`src/metadata/embed-image-metadata.ts` は元画像バイト列をできるだけ保ったままメタデータを追加します。
+
+- PNG: UTF-8 `iTXt` chunk
+- JPEG: APP1 XMP packet
+- WebP: RIFF `XMP` chunk
+
+埋め込みできない場合は元画像とsidecar JSONを保存します。
+
+## メタデータモデル
 
 ```ts
 type ImageMetadata = {
@@ -119,119 +187,95 @@ type ImageMetadata = {
 };
 ```
 
-Saving strategy:
+`raw` は型には残しますが、通常のエクスポートや保存対象には含めません。
 
-- Always support sidecar JSON first because it is simple and reliable.
-- Add image-embedded metadata after the metadata parser is stable.
-- For PNG, investigate `tEXt` / `iTXt` chunks.
-- For JPEG, investigate EXIF / XMP.
-- For WebP, investigate EXIF / XMP chunks.
-- Preserve the original image bytes whenever possible. Avoid canvas re-encoding unless explicitly chosen, because it may alter quality or strip data.
+## 権限とプライバシー方針
 
-## Security And Privacy Guidelines
+現在のmanifest権限:
 
-- Request the narrowest practical host permissions, ideally only current ChatGPT domains.
-- Do not add broad host permissions like `<all_urls>` unless justified and documented.
-- Do not collect credentials, cookies, auth headers, session tokens, or unrelated network response bodies.
-- Do not send prompts, images, metadata, or conversation data to external services by default.
-- Keep all processing local unless the user explicitly asks for remote integration.
-- Avoid logging full prompts or raw response bodies to persistent logs.
-- Test fixtures must be sanitized before committing.
-- The ChatGPT web UI and internal network response format are private implementation details and may change. Write parsers defensively.
+- `https://chatgpt.com/*`
+- `https://chat.openai.com/*`
+- `sidePanel`
+- `downloads`
+- `storage`
+- `scripting`
+- `clipboardWrite`
 
-## Suggested Repository Shape
+使わない方針:
 
-This is a proposed shape. Follow it unless the actual toolchain suggests a better local pattern.
+- `<all_urls>`
+- `cookies`
+- `webRequest` によるレスポンス本文取得
+- `debugger` API。ただし将来の最終手段として検討余地はある
+- 外部サービス送信
 
-```text
-.
-├── AGENTS.md
-├── package.json
-├── tsconfig.json
-├── vite.config.ts
-├── src
-│   ├── manifest.ts or manifest.json
-│   ├── background
-│   │   └── service-worker.ts
-│   ├── content
-│   │   ├── content-script.ts
-│   │   └── page-hook.ts
-│   ├── devtools
-│   │   ├── devtools.html
-│   │   ├── devtools.ts
-│   │   └── panel.ts
-│   ├── metadata
-│   │   ├── parse-chatgpt.ts
-│   │   ├── write-metadata.ts
-│   │   └── types.ts
-│   └── shared
-│       └── messages.ts
-├── tests
-│   ├── fixtures
-│   └── metadata
-└── dist
+プロンプト、画像、メタデータ、会話情報はデフォルトで外部送信しません。
+
+## Git管理ルール
+
+コミットしないもの:
+
+- `dist/`
+- `release/`
+- `node_modules/`
+- `coverage/`
+- `.vitest/`
+
+実チャット履歴、実画像、認証付きURL、署名付きURLはリポジトリ外で管理してください。データ構造の確認には `tests/fixtures/` のサニタイズ済みfixtureを使います。
+
+コミット前チェック推奨:
+
+```bash
+git status --short --ignored
+git diff --check
+npm test
+npm run build
+npm run package
+npm audit --audit-level=moderate
 ```
 
-## Initial Technical Choices
+秘密情報チェックでは、少なくとも以下を確認してください。
 
-Prefer:
+- API key、access token、session token、Cookieがないこと
+- `sig=` 付きURLはfixture内で `redacted` になっていること
+- ローカルパスやユーザー名が入っていないこと
+- 実画像や実チャットJSONが入っていないこと
 
-- TypeScript.
-- Vite or another lightweight extension-friendly build setup.
-- A small test runner such as Vitest for parser and metadata-writer tests.
-- Minimal UI dependencies at first.
+## テスト方針
 
-Avoid at the beginning:
+壊れやすい箇所を優先してテストします。
 
-- Heavy frontend frameworks unless the UI becomes complex.
-- Large browser automation setup before the core metadata capture is proven.
-- Publishing/store packaging concerns before the local unpacked extension works.
+- ChatGPT conversation parser
+- recent image response parser
+- URL parsing
+- ZIP writer
+- PNG/JPEG/WebP metadata embedding
+- metadata exportから `raw` を除外すること
 
-## First Milestone
+テストfixtureは `tests/fixtures/` に最小化・サニタイズ済みのものだけを置きます。
 
-Deliver a DevTools prototype that can:
+## 既知の制限と今後の候補
 
-1. Load as an unpacked Chrome extension.
-2. Add a DevTools panel or run from a DevTools page.
-3. Listen to completed network requests.
-4. Filter likely ChatGPT conversation/image responses.
-5. Call `request.getContent()` for matching responses.
-6. Parse response JSON into `ImageMetadata`.
-7. Show captured metadata in the panel.
-8. Export selected metadata as a `.json` file.
+- ChatGPTの内部APIやDOM構造が変わると壊れる可能性があります。
+- ChatGPTの「画像」ページを開かずに全画像URLを直接取得する機能は未実装です。
+- サイドパネルはChromeの仕様上、パネル外へ拡大表示できません。大きなビューアが必要なら、拡張機能の別タブ/別ウィンドウ形式を検討してください。
+- Chrome Web Store版は未公開です。提出用ZIP作成は `npm run package` で対応しています。
+- ライセンスはMITです。詳細は `LICENSE` を参照してください。
 
-Definition of done:
+## 作業ルール
 
-- The user can generate an image in ChatGPT, keep DevTools open, and see candidate prompt/caption metadata appear in the extension UI.
-- Parser behavior is covered by sanitized fixture tests.
-- Known unsupported cases are documented.
+- 変更前に既存コードを読む。
+- ユーザーの未コミット変更を勝手に戻さない。
+- 権限追加は最小限にし、理由を明記する。
+- 仕様変更時はREADMEとAGENTS.mdも更新する。
+- 公開リポジトリ前提で、実データや秘密情報を含めない。
+- Chrome API挙動が不確かな場合は公式ドキュメントを優先する。
+- UI変更はサイドパネルの小さい幅でも破綻しないようにする。
 
-## Open Questions
-
-Resolve these during implementation:
-
-- Current ChatGPT hostnames to support, for example `https://chatgpt.com/*` and/or legacy `https://chat.openai.com/*`.
-- Exact network endpoints and JSON paths containing image prompt/caption metadata.
-- Whether generated images are served as PNG, JPEG, WebP, or multiple formats.
-- Preferred filename format.
-- Whether sidecar JSON should always be saved or only when metadata embedding fails.
-- Whether the final UX should be DevTools-only, page overlay, popup action, context menu, or a combination.
-
-## Agent Working Rules
-
-- Read this file before making architecture changes.
-- Inspect the existing repository before editing.
-- Keep changes scoped to the current milestone.
-- Update this file when major decisions change.
-- Prefer official Chrome extension documentation when API behavior is uncertain.
-- Preserve user-owned changes. Do not revert files unless explicitly asked.
-- Add tests for parsers and binary metadata writers; these are the most fragile parts.
-- Keep permissions narrow and explain any permission expansion in code review notes or commit messages.
-
-## Official References
+## 参考リンク
 
 - Chrome DevTools Network extension API: <https://developer.chrome.com/docs/extensions/reference/api/devtools/network>
 - Chrome content scripts: <https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts>
 - Chrome downloads API: <https://developer.chrome.com/docs/extensions/reference/api/downloads>
-- Chrome debugger API: <https://developer.chrome.com/docs/extensions/reference/api/debugger>
+- Chrome sidePanel API: <https://developer.chrome.com/docs/extensions/reference/api/sidePanel>
 - Chrome extension samples: <https://github.com/GoogleChrome/chrome-extensions-samples>

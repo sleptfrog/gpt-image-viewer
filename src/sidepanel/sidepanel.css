@@ -1,0 +1,676 @@
+:root {
+  color-scheme: light dark;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  background: Canvas;
+  color: CanvasText;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: Canvas;
+}
+
+button {
+  border: 1px solid color-mix(in srgb, CanvasText 22%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, Canvas 92%, CanvasText);
+  color: CanvasText;
+  cursor: pointer;
+  font: inherit;
+  min-height: 32px;
+  padding: 0 12px;
+}
+
+button:hover:not(:disabled) {
+  background: color-mix(in srgb, Canvas 84%, CanvasText);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+#app {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 14%, transparent);
+  padding: 14px 14px 12px;
+}
+
+.title-block {
+  min-width: 0;
+}
+
+h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.status {
+  margin: 4px 0 0;
+  color: color-mix(in srgb, CanvasText 68%, transparent);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.counter {
+  display: grid;
+  min-width: 64px;
+  justify-items: end;
+  color: color-mix(in srgb, CanvasText 70%, transparent);
+  font-size: 12px;
+}
+
+.counter span:first-child {
+  color: CanvasText;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 10%, transparent);
+  padding: 10px 14px;
+}
+
+.toolbar button {
+  flex: 1 1 120px;
+}
+
+.toolbar-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.toolbar-menu summary {
+  display: grid;
+  min-width: 40px;
+  min-height: 32px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, CanvasText 22%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, Canvas 92%, CanvasText);
+  cursor: pointer;
+  font-weight: 700;
+  list-style: none;
+  padding: 0 10px;
+}
+
+.toolbar-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.toolbar-menu summary:hover {
+  background: color-mix(in srgb, Canvas 84%, CanvasText);
+}
+
+.toolbar-menu-panel {
+  position: absolute;
+  right: 0;
+  z-index: 10;
+  display: grid;
+  width: min(260px, calc(100vw - 28px));
+  gap: 6px;
+  margin-top: 6px;
+  border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+  border-radius: 8px;
+  background: Canvas;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+  padding: 8px;
+}
+
+.toolbar-menu-panel button {
+  flex: none;
+  width: 100%;
+  text-align: left;
+}
+
+.download-progress {
+  display: grid;
+  gap: 6px;
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 10%, transparent);
+  padding: 8px 14px 10px;
+}
+
+.download-progress[hidden] {
+  display: none;
+}
+
+.download-progress-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: color-mix(in srgb, CanvasText 72%, transparent);
+  font-size: 12px;
+}
+
+.download-progress progress {
+  width: 100%;
+  height: 8px;
+}
+
+.missing-image-notice {
+  border: 1px solid color-mix(in srgb, #9a6700 28%, CanvasText 12%);
+  border-radius: 8px;
+  background: color-mix(in srgb, #9a6700 12%, Canvas);
+  color: color-mix(in srgb, CanvasText 82%, transparent);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 10px 12px;
+}
+
+.conversation {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 10%, transparent);
+  padding: 8px 14px;
+  font-size: 12px;
+}
+
+.conversation-label {
+  color: color-mix(in srgb, CanvasText 58%, transparent);
+}
+
+.conversation-id {
+  overflow-wrap: anywhere;
+}
+
+.content {
+  display: grid;
+  gap: 12px;
+  overflow: auto;
+  padding: 12px 14px 18px;
+}
+
+.empty,
+.error {
+  border: 1px dashed color-mix(in srgb, CanvasText 22%, transparent);
+  border-radius: 8px;
+  color: color-mix(in srgb, CanvasText 66%, transparent);
+  padding: 18px;
+  text-align: center;
+}
+
+.error {
+  border-style: solid;
+  color: CanvasText;
+}
+
+.image-list {
+  display: grid;
+  gap: 10px;
+}
+
+.image-card {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, CanvasText 14%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, Canvas 96%, CanvasText);
+  min-height: 112px;
+  padding: 10px;
+}
+
+.image-card-selected {
+  border-color: color-mix(in srgb, Highlight 60%, CanvasText 14%);
+  background: color-mix(in srgb, Highlight 9%, Canvas);
+}
+
+.thumb,
+.thumb-placeholder {
+  display: grid;
+  aspect-ratio: 1;
+  width: 100%;
+  place-items: center;
+  border-radius: 6px;
+  background: color-mix(in srgb, CanvasText 9%, transparent);
+  overflow: hidden;
+}
+
+button.thumb {
+  border: 0;
+  cursor: zoom-in;
+  min-height: auto;
+  padding: 0;
+}
+
+button.thumb:focus-visible {
+  outline: 2px solid Highlight;
+  outline-offset: 2px;
+}
+
+.thumb img {
+  display: block;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+}
+
+.thumb-placeholder {
+  color: color-mix(in srgb, CanvasText 56%, transparent);
+  font-size: 11px;
+  text-align: center;
+}
+
+.image-main {
+  min-width: 0;
+}
+
+.image-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.image-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: color-mix(in srgb, CanvasText 66%, transparent);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.image-select input {
+  margin: 0;
+}
+
+.image-id {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.image-time {
+  color: color-mix(in srgb, CanvasText 58%, transparent);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.image-text {
+  display: -webkit-box;
+  margin: 7px 0 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: color-mix(in srgb, CanvasText 76%, transparent);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.card-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.card-actions button {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.badge {
+  border-radius: 999px;
+  background: color-mix(in srgb, CanvasText 10%, transparent);
+  color: color-mix(in srgb, CanvasText 70%, transparent);
+  font-size: 11px;
+  line-height: 1;
+  padding: 5px 7px;
+}
+
+.confirm-dialog {
+  width: min(360px, calc(100vw - 28px));
+  border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+  border-radius: 8px;
+  background: Canvas;
+  color: CanvasText;
+  padding: 0;
+}
+
+.confirm-dialog::backdrop {
+  background: rgb(0 0 0 / 0.42);
+}
+
+.confirm-dialog-panel {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+
+.confirm-dialog h2 {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+.confirm-dialog p {
+  margin: 0;
+  color: color-mix(in srgb, CanvasText 72%, transparent);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+#confirm-clear-dictionary {
+  border-color: color-mix(in srgb, #b3261e 44%, CanvasText 10%);
+  background: color-mix(in srgb, #b3261e 16%, Canvas);
+}
+
+.viewer-dialog {
+  box-sizing: border-box;
+  width: min(calc(100vw - 16px), 1100px);
+  max-width: calc(100vw - 16px);
+  height: min(calc(100dvh - 16px), 920px);
+  max-height: calc(100dvh - 16px);
+  border: 0;
+  background: transparent;
+  color: CanvasText;
+  padding: 0;
+  overflow: hidden;
+}
+
+.viewer-dialog::backdrop {
+  background: rgb(0 0 0 / 0.74);
+}
+
+.viewer-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) minmax(190px, 34vh);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: Canvas;
+}
+
+.viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 58px;
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 14%, transparent);
+  padding: 10px 12px;
+}
+
+.viewer-title-block {
+  min-width: 0;
+}
+
+.viewer-header h2 {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+.viewer-position {
+  margin: 2px 0 0;
+  color: color-mix(in srgb, CanvasText 62%, transparent);
+  font-size: 12px;
+}
+
+.viewer-icon-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  font-size: 0;
+  line-height: 1;
+}
+
+.viewer-icon-button::before,
+.viewer-icon-button::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+}
+
+.viewer-icon-button::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.viewer-icon-button::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.viewer-stage {
+  position: relative;
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
+  background: color-mix(in srgb, CanvasText 7%, Canvas);
+}
+
+.viewer-figure {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  margin: 0;
+  place-items: center;
+  padding: 12px 42px;
+}
+
+.viewer-figure img {
+  display: block;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.viewer-image-status {
+  color: color-mix(in srgb, CanvasText 66%, transparent);
+  font-size: 12px;
+}
+
+.viewer-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 34%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  min-height: 0;
+  padding: 0;
+}
+
+.viewer-edge:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.04);
+}
+
+.viewer-edge-left {
+  left: 0;
+  cursor: w-resize;
+}
+
+.viewer-edge-right {
+  right: 0;
+  cursor: e-resize;
+}
+
+.viewer-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  color: CanvasText;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 42px;
+  min-height: 42px;
+  padding: 0;
+  transform: translateY(-50%);
+  font-size: 0;
+  line-height: 1;
+}
+
+.viewer-nav::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 11px;
+  height: 11px;
+  border-top: 3px solid currentColor;
+  border-left: 3px solid currentColor;
+  border-radius: 1px;
+  content: "";
+}
+
+.viewer-nav-left {
+  left: 8px;
+}
+
+.viewer-nav-left::before {
+  transform: translate(-35%, -50%) rotate(-45deg);
+}
+
+.viewer-nav-right {
+  right: 8px;
+}
+
+.viewer-nav-right::before {
+  transform: translate(-65%, -50%) rotate(135deg);
+}
+
+.viewer-details {
+  display: grid;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  border-top: 1px solid color-mix(in srgb, CanvasText 14%, transparent);
+  padding: 12px;
+}
+
+.viewer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.viewer-actions button {
+  flex: 1 1 120px;
+}
+
+.viewer-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  color: color-mix(in srgb, CanvasText 62%, transparent);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.viewer-text-section {
+  display: grid;
+  gap: 6px;
+}
+
+.viewer-text-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.viewer-text-heading h3 {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.viewer-copy-text {
+  min-height: 26px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.viewer-full-text {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, CanvasText 5%, Canvas);
+  color: color-mix(in srgb, CanvasText 84%, transparent);
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 140px;
+  overflow: auto;
+  padding: 8px;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 430px) {
+  .image-card {
+    grid-template-columns: 88px minmax(0, 1fr);
+    min-height: 88px;
+  }
+
+  .viewer-figure {
+    padding: 10px 34px;
+  }
+
+  .viewer-shell {
+    grid-template-rows: auto minmax(0, 1fr) minmax(220px, 42vh);
+  }
+
+  .viewer-details {
+    height: 100%;
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "conversation_id": "conv_sanitized",
+  "mapping": {
+    "user-node": {
+      "parent": null,
+      "children": ["async-image-node"],
+      "message": {
+        "id": "user-message",
+        "author": { "role": "user" },
+        "create_time": 1700000000,
+        "content": {
+          "content_type": "text",
+          "parts": ["Create a simple test image."]
+        },
+        "metadata": {}
+      }
+    },
+    "async-image-node": {
+      "parent": "user-node",
+      "children": [],
+      "message": {
+        "id": "async-image-message",
+        "author": { "role": "tool" },
+        "create_time": 1700000002,
+        "content": {
+          "content_type": "multimodal_text",
+          "parts": [
+            {
+              "content_type": "image_asset_pointer",
+              "asset_pointer": "sediment://file_sanitized_image_1",
+              "metadata": {}
+            }
+          ]
+        },
+        "metadata": {
+          "image_gen_title": "Simple test image"
+        }
+      }
+    },
+    "prompt-node": {
+      "parent": "assistant-parent",
+      "children": ["caption-image-node"],
+      "message": {
+        "id": "prompt-message",
+        "author": { "role": "assistant" },
+        "create_time": 1700000005,
+        "content": {
+          "content_type": "code",
+          "text": "{\"prompt\":\"Draw a clean test image with three colored geometric shapes on a white desk.\",\"reference_image_paths\":[\"sanitized-reference.png\"],\"aspect_ratio\":\"1:1\"}"
+        },
+        "metadata": {}
+      }
+    },
+    "caption-image-node": {
+      "parent": "prompt-node",
+      "children": [],
+      "message": {
+        "id": "caption-image-message",
+        "author": { "role": "tool" },
+        "create_time": 1700000010,
+        "content": {
+          "content_type": "multimodal_text",
+          "parts": [
+            {
+              "content_type": "image_asset_pointer",
+              "asset_pointer": "sediment://file_sanitized_image_1",
+              "metadata": {}
+            },
+            "Model caption: A clean test image with three colored geometric shapes on a white desk."
+          ]
+        },
+        "metadata": {
+          "image_gen_title": "Simple test image"
+        }
+      }
+    }
+  }
+}
