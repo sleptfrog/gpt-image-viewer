@@ -15,6 +15,7 @@ describe("content capture extraction", () => {
     });
 
     expect(result.conversationId).toBe("conv_sanitized");
+    expect(result.hasConversationMapping).toBe(true);
     expect(result.items).toHaveLength(1);
     expect(result.items[0]).toMatchObject({
       source: "chatgpt-web",
@@ -29,6 +30,48 @@ describe("content capture extraction", () => {
       capturedAt: "2026-05-19T00:00:00.000Z"
     });
     expect(result.items[0]).not.toHaveProperty("raw");
+  });
+
+  it("keeps the conversation id when a conversation has no images", () => {
+    const result = extractCapturedConversationItems({
+      body: JSON.stringify({
+        conversation_id: "conv_without_images",
+        mapping: {
+          "user-node": {
+            parent: null,
+            children: [],
+            message: {
+              id: "user-message",
+              author: { role: "user" },
+              create_time: 1700000000,
+              content: {
+                content_type: "text",
+                parts: ["Hello, no image here."]
+              },
+              metadata: {}
+            }
+          }
+        }
+      }),
+      responseUrl: "https://chatgpt.com/backend-api/conversation/conv_without_images",
+      capturedAt: "2026-05-19T00:00:00.000Z"
+    });
+
+    expect(result.conversationId).toBe("conv_without_images");
+    expect(result.hasConversationMapping).toBe(true);
+    expect(result.items).toEqual([]);
+  });
+
+  it("marks non-conversation-shaped responses so they do not become empty snapshots", () => {
+    const result = extractCapturedConversationItems({
+      body: JSON.stringify({ detail: { message: "not a conversation mapping" } }),
+      responseUrl: "https://chatgpt.com/backend-api/conversation/conv_lightweight_response",
+      capturedAt: "2026-05-19T00:00:00.000Z"
+    });
+
+    expect(result.conversationId).toBe("conv_lightweight_response");
+    expect(result.hasConversationMapping).toBe(false);
+    expect(result.items).toEqual([]);
   });
 
   it("extracts recent image URL records for the URL dictionary", () => {

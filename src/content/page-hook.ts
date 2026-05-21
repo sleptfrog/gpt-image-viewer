@@ -47,7 +47,7 @@ function postCapturedResponse(url: string, body: string): void {
   const capturedAt = new Date().toISOString();
   if (type === "conversation") {
     const result = extractCapturedConversationItems({ body, responseUrl: url, capturedAt });
-    if (result.items.length === 0) {
+    if (result.items.length === 0 && (!result.conversationId || !result.hasConversationMapping)) {
       return;
     }
 

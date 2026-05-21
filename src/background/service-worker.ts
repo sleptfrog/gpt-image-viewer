@@ -62,7 +62,7 @@ async function handleCaptureMessage(message: CaptureMessage): Promise<number> {
 
   const items = message.payload?.items?.filter(isImageMetadata) ?? [];
   const conversationId = message.payload?.conversationId ?? items.find((item) => item.conversationId)?.conversationId;
-  if (!conversationId || items.length === 0) {
+  if (!conversationId) {
     return 0;
   }
 

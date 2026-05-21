@@ -2,7 +2,7 @@ import type { ImageMetadata } from "../metadata/types";
 import { embedImageMetadata, type SupportedImageFormat } from "../metadata/embed-image-metadata";
 import { createMetadataExport, stripRawMetadata } from "../metadata/write-metadata";
 import { loadCapturedConversation } from "../shared/capture-store";
-import { parseChatGptConversationUrl } from "../shared/chatgpt-url";
+import { classifyChatGptPageUrl } from "../shared/chatgpt-url";
 import {
   clearImageUrlRecords,
   createImageUrlRecordsExport,
@@ -14,6 +14,7 @@ import {
   type ImageUrlRecord
 } from "../shared/image-url-store";
 import { createZipArchive, type ZipFileEntry } from "../shared/zip";
+import { messages } from "./messages";
 
 type PageImageCandidate = {
   imageId: string;
@@ -33,6 +34,11 @@ type LoadOptions = {
 type PageImageScanOptions = {
   maxAttempts?: number;
   delayMs?: number;
+};
+
+type LoadedConversationMetadata = {
+  items: ImageMetadata[];
+  statusPrefix: string;
 };
 
 const AUTO_PAGE_IMAGE_SCAN_ATTEMPTS = 5;
@@ -125,28 +131,42 @@ async function loadCurrentConversation(options: LoadOptions = {}): Promise<void>
   const shouldCollectPageImages = options.collectPageImages ?? true;
   setBusy(true);
   hideDownloadProgress();
-  setStatus(options.status ?? "現在のチャットを読み込み中");
-  contentEl.replaceChildren(renderEmpty("読み込み中"));
+  currentItems = [];
+  currentPreviewUrls = new Map();
+  selectedItemKeys = new Set();
+  conversationIdEl.textContent = "-";
+  setStatus(options.status ?? messages.status.loadingCurrentChat);
+  renderEmptyContent(messages.empty.loading);
 
   try {
     const tab = await getActiveTab();
-    const context = parseChatGptConversationUrl(tab.url);
+    const pageContext = classifyChatGptPageUrl(tab.url);
 
     if (sequence !== loadSequence) {
       return;
     }
 
-    if (!tab.id || !context) {
-      currentItems = [];
-      currentPreviewUrls = new Map();
-      selectedItemKeys = new Set();
-      conversationIdEl.textContent = "-";
-      setStatus("ChatGPTのチャットページを開くと画像一覧を表示します");
-      renderItems([]);
+    if (!tab.id) {
+      resetCurrentView(messages.status.outsideChatGpt, messages.empty.outsideChatGpt);
       return;
     }
 
-    conversationIdEl.textContent = context.conversationId;
+    if (pageContext.kind === "unsupported") {
+      resetCurrentView(messages.status.outsideChatGpt, messages.empty.outsideChatGpt);
+      return;
+    }
+
+    if (pageContext.kind === "images") {
+      resetCurrentView(messages.status.chatGptImagesPage, messages.empty.chatGptImagesPage);
+      return;
+    }
+
+    if (pageContext.kind === "chatgpt") {
+      resetCurrentView(messages.status.chatGptNonChatPage, messages.empty.chatGptNonChatPage);
+      return;
+    }
+
+    conversationIdEl.textContent = pageContext.conversationId;
 
     const capturedAt = new Date().toISOString();
     const pageImages = shouldCollectPageImages
@@ -175,10 +195,22 @@ async function loadCurrentConversation(options: LoadOptions = {}): Promise<void>
     }
 
     let imageUrls = imageUrlMapFromRecords(imageUrlRecords);
-    const loaded = await loadConversationMetadata(context.conversationId, imageUrls);
+    const loaded = await loadConversationMetadata(pageContext.conversationId, imageUrls);
+    if (!loaded) {
+      resetCurrentView(messages.status.chatDataNotCaptured, messages.empty.chatDataNotCaptured);
+      conversationIdEl.textContent = pageContext.conversationId;
+      return;
+    }
+
     currentItems = sortItems(applyImageUrlRecords(loaded.items, imageUrlRecords).map(stripRawMetadata));
     currentPreviewUrls = previewUrlMapFromRecords(imageUrlRecords);
     imageUrls = imageUrlMapFromRecords(imageUrlRecords);
+
+    if (currentItems.length === 0) {
+      setStatus(messages.status.noImagesInConversation);
+      renderEmptyContent(messages.empty.noImagesInConversation);
+      return;
+    }
 
     const visibleItems = getVisibleItems();
     setStatus(
@@ -198,8 +230,8 @@ async function loadCurrentConversation(options: LoadOptions = {}): Promise<void>
     currentPreviewUrls = new Map();
     selectedItemKeys = new Set();
     conversationIdEl.textContent = "-";
-    setStatus("チャットの読み込みに失敗しました");
-    renderError(error instanceof Error ? localizeErrorMessage(error.message) : "不明なエラー");
+    setStatus(messages.status.loadFailed);
+    renderError(error instanceof Error ? localizeErrorMessage(error.message) : messages.errors.unknown);
   } finally {
     if (sequence === loadSequence) {
       setBusy(false);
@@ -225,18 +257,16 @@ function scheduleLoadCurrentConversation(options: LoadOptions = {}): void {
 async function loadConversationMetadata(
   conversationId: string,
   imageUrls: ReadonlyMap<string, string>
-): Promise<{ items: ImageMetadata[]; statusPrefix: string }> {
+): Promise<LoadedConversationMetadata | undefined> {
   const snapshot = await loadCapturedConversation(conversationId);
   if (snapshot) {
     return {
       items: applyImageUrls(stripImageUrls(snapshot.items), imageUrls),
-      statusPrefix: "取得済みデータを読み込み"
+      statusPrefix: messages.status.loadedPrefix
     };
   }
 
-  throw new Error(
-    "このチャットのメタデータはまだ取得されていません。ChatGPTタブを一度再読み込みしてから、このサイドパネルを更新してください。"
-  );
+  return undefined;
 }
 
 function stripImageUrls(items: ImageMetadata[]): ImageMetadata[] {
@@ -352,21 +382,16 @@ function formatLoadedStatus(
   missingUrlCount: number,
   hiddenAttachmentCount: number
 ): string {
-  const parts = [
-    `${statusPrefix}: ${itemCount}件`,
-    `ページ上のURL ${pageUrlCount}件`,
-    `辞書URL ${matchedUrlRecordCount}/${storedUrlRecordCount}件`
-  ];
-
-  if (missingUrlCount > 0) {
-    parts.push(`画像未取得 ${missingUrlCount}件`);
-  }
-
-  if (!showUserAttachments && hiddenAttachmentCount > 0) {
-    parts.push(`添付画像を非表示 ${hiddenAttachmentCount}件`);
-  }
-
-  return parts.join(", ");
+  return messages.status.loaded({
+    statusPrefix,
+    itemCount,
+    pageUrlCount,
+    matchedUrlRecordCount,
+    storedUrlRecordCount,
+    missingUrlCount,
+    hiddenAttachmentCount,
+    showUserAttachments
+  });
 }
 
 async function getActiveTab(): Promise<chrome.tabs.Tab> {
@@ -480,6 +505,25 @@ function setBusy(isBusy: boolean): void {
   }
 }
 
+function resetCurrentView(statusMessage: string, emptyMessage: string): void {
+  currentItems = [];
+  currentPreviewUrls = new Map();
+  selectedItemKeys = new Set();
+  conversationIdEl.textContent = "-";
+  setStatus(statusMessage);
+  renderEmptyContent(emptyMessage);
+  closeViewer();
+}
+
+function renderEmptyContent(message: string): void {
+  pruneSelectedItems([]);
+  countEl.textContent = "0";
+  updateSelectionControls(false);
+  exportJsonButton.disabled = true;
+  contentEl.replaceChildren(renderEmpty(message));
+  syncViewerAfterItemsChange();
+}
+
 function getVisibleItems(): ImageMetadata[] {
   if (showUserAttachments) {
     return currentItems;
@@ -505,8 +549,8 @@ function renderItems(items: ImageMetadata[]): void {
     const hiddenCount = countHiddenUserAttachments(currentItems);
     const message =
       !showUserAttachments && currentItems.length > 0 && hiddenCount > 0
-        ? `添付画像 ${hiddenCount}件は非表示です。「添付画像を表示」をオンにすると表示できます。`
-        : "画像メタデータはまだ見つかっていません";
+        ? messages.empty.hiddenAttachments(hiddenCount)
+        : messages.empty.noMetadata;
     contentEl.replaceChildren(renderEmpty(message));
     syncViewerAfterItemsChange();
     return;
@@ -528,7 +572,7 @@ function countMissingImages(items: ImageMetadata[]): number {
 function renderMissingImageNotice(missingCount: number): HTMLElement {
   const notice = document.createElement("div");
   notice.className = "missing-image-notice";
-  notice.textContent = `画像未取得の項目が${missingCount}件あります。ChatGPTの「画像」ページを開き、対象画像が表示されるまでスクロールすると取り込めます。`;
+  notice.textContent = messages.notice.missingImages(missingCount);
   return notice;
 }
 
@@ -562,7 +606,7 @@ function renderThumbnail(item: ImageMetadata): HTMLElement {
   image.loading = "lazy";
   image.src = imageUrl;
   image.addEventListener("error", () => {
-    wrapper.replaceWith(renderThumbnailPlaceholder("画像を表示できません"));
+    wrapper.replaceWith(renderThumbnailPlaceholder(messages.viewer.imageUnavailable));
   });
 
   wrapper.append(image);
@@ -637,7 +681,7 @@ function renderImageMain(item: ImageMetadata): HTMLElement {
   downloadButton.disabled = !item.imageUrl;
   downloadButton.addEventListener("click", () => {
     void downloadSingleImage(item).catch((error: unknown) => {
-      setStatus("画像の保存に失敗しました");
+      setStatus(messages.status.imageSaveFailed);
       console.warn("Failed to download image", error);
     });
   });
@@ -684,26 +728,26 @@ function setItemSelected(item: ImageMetadata, isSelected: boolean): void {
   }
   renderCurrentItems();
   const selectedCount = getSelectedDownloadableItems().length;
-  setStatus(selectedCount > 0 ? `${selectedCount}件を選択中` : "選択を解除しました");
+  setStatus(selectedCount > 0 ? messages.status.selected(selectedCount) : messages.status.selectionCleared);
 }
 
 function toggleSelectAllDownloadableItems(): void {
   const downloadableItems = getDownloadableItems();
   if (downloadableItems.length === 0) {
-    setStatus("選択できる取得済み画像がありません");
+    setStatus(messages.status.noSelectableImages);
     return;
   }
 
   if (areAllDownloadableItemsSelected()) {
     selectedItemKeys = new Set();
     renderCurrentItems();
-    setStatus("全選択を解除しました");
+    setStatus(messages.status.allSelectionCleared);
     return;
   }
 
   selectedItemKeys = new Set(downloadableItems.map(imageItemKey));
   renderCurrentItems();
-  setStatus(`${downloadableItems.length}件を全選択しました`);
+  setStatus(messages.status.allSelected(downloadableItems.length));
 }
 
 function getViewerItems(): ImageMetadata[] {
@@ -714,7 +758,7 @@ function openViewerForItem(item: ImageMetadata): void {
   const viewerItems = getViewerItems();
   const index = viewerItems.findIndex((candidate) => imageItemKey(candidate) === imageItemKey(item));
   if (index < 0) {
-    setStatus("ビューアで表示できる画像URLがありません");
+    setStatus(messages.status.viewerNoImageUrl);
     return;
   }
 
@@ -766,9 +810,9 @@ function renderViewer(): void {
   viewerImageIdEl.textContent = item.imageId ?? item.messageId ?? "画像";
   viewerCreatedAtEl.textContent = item.createdAt ? formatDisplayDate(item.createdAt) : "";
   viewerCreatedAtEl.dateTime = item.createdAt ?? "";
-  viewerUserInputEl.textContent = userInput || "ユーザー入力は取得されていません";
-  viewerCaptionEl.textContent = caption || "キャプションは取得されていません";
-  viewerPromptEl.textContent = prompt || "生成プロンプトは取得されていません";
+  viewerUserInputEl.textContent = userInput || messages.viewer.userInputMissing;
+  viewerCaptionEl.textContent = caption || messages.viewer.captionMissing;
+  viewerPromptEl.textContent = prompt || messages.viewer.promptMissing;
   viewerCopyUserInputButton.disabled = !userInput;
   viewerCopyCaptionButton.disabled = !caption;
   viewerCopyPromptButton.disabled = !prompt;
@@ -843,7 +887,7 @@ async function copyCurrentViewerImage(): Promise<void> {
   try {
     const response = await fetch(item.imageUrl, { credentials: "include" });
     if (!response.ok) {
-      throw new Error(`画像リクエストに失敗しました: ${response.status}`);
+      throw new Error(messages.errors.imageRequestFailed(response.status));
     }
 
     const sourceBlob = await response.blob();
@@ -852,9 +896,9 @@ async function copyCurrentViewerImage(): Promise<void> {
     } catch {
       await writeImageBlobToClipboard(await convertImageBlobToPng(sourceBlob));
     }
-    setStatus("画像をクリップボードにコピーしました");
+    setStatus(messages.status.imageCopied);
   } catch (error) {
-    setStatus("画像のコピーに失敗しました");
+    setStatus(messages.status.imageCopyFailed);
     console.warn("Failed to copy image", error);
   } finally {
     viewerCopyImageButton.disabled = !currentViewerItem()?.imageUrl;
@@ -864,16 +908,16 @@ async function copyCurrentViewerImage(): Promise<void> {
 async function copyViewerText(kind: "caption" | "prompt" | "userInput"): Promise<void> {
   const item = currentViewerItem();
   const value = kind === "caption" ? item?.caption : kind === "prompt" ? item?.prompt : item?.userInput;
-  const label = kind === "caption" ? "キャプション" : kind === "prompt" ? "生成プロンプト" : "ユーザー入力";
+  const label = kind === "caption" ? messages.labels.caption : kind === "prompt" ? messages.labels.prompt : messages.labels.userInput;
   if (!value) {
     return;
   }
 
   try {
     await navigator.clipboard.writeText(value);
-    setStatus(`${label}をコピーしました`);
+    setStatus(messages.status.textCopied(label));
   } catch (error) {
-    setStatus(`${label}のコピーに失敗しました`);
+    setStatus(messages.status.textCopyFailed(label));
     console.warn(`Failed to copy ${kind}`, error);
   }
 }
@@ -894,7 +938,7 @@ async function convertImageBlobToPng(blob: Blob): Promise<Blob> {
     canvas.height = bitmap.height;
     const context = canvas.getContext("2d");
     if (!context) {
-      throw new Error("Canvas 2Dコンテキストを取得できません");
+      throw new Error(messages.errors.canvasContextUnavailable);
     }
     context.drawImage(bitmap, 0, 0);
     return await canvasToBlob(canvas, "image/png");
@@ -909,7 +953,7 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string): Promise<Blob> {
       if (blob) {
         resolve(blob);
       } else {
-        reject(new Error("Canvas変換に失敗しました"));
+        reject(new Error(messages.errors.canvasConversionFailed));
       }
     }, type);
   });
@@ -937,9 +981,9 @@ function renderError(message: string): void {
 
 function localizeErrorMessage(message: string): string {
   if (message.includes("Side panel DOM is missing")) {
-    return "サイドパネルの初期化に失敗しました。拡張機能を再読み込みしてください。";
+    return messages.errors.sidePanelInitFailed;
   }
-  return message || "不明なエラー";
+  return message || messages.errors.unknown;
 }
 
 type PreparedImageDownload = {
@@ -951,18 +995,18 @@ type PreparedImageDownload = {
 async function downloadSingleImage(item: ImageMetadata): Promise<void> {
   hideDownloadProgress();
   setBusy(true);
-  setStatus("画像を保存中");
+  setStatus(messages.status.imageSaving);
 
   try {
     const prepared = await prepareImageDownload(item);
     if (!prepared) {
-      setStatus("この画像のURLはまだ取得できていません");
+      setStatus(messages.status.imageUrlMissing);
     } else {
       await downloadPreparedImage(prepared);
       if (prepared.embedded) {
-        setStatus(`${prepared.imageFile.path} を保存しました（メタデータ埋め込み済み）`);
+        setStatus(messages.status.imageSavedEmbedded(prepared.imageFile.path));
       } else {
-        setStatus(`${prepared.imageFile.path} を保存しました（JSON同梱）`);
+        setStatus(messages.status.imageSavedWithJson(prepared.imageFile.path));
       }
     }
   } finally {
@@ -992,7 +1036,7 @@ async function downloadImagesAsZip(sourceItems: ImageMetadata[]): Promise<void> 
   const items = sourceItems.filter((item) => item.imageUrl);
   const skipped = sourceItems.length - items.length;
   if (items.length === 0) {
-    setStatus("保存できる選択画像がありません");
+    setStatus(messages.status.noSelectedImagesToSave);
     return;
   }
 
@@ -1007,8 +1051,8 @@ async function downloadImagesAsZip(sourceItems: ImageMetadata[]): Promise<void> 
 
   try {
     for (const [index, item] of items.entries()) {
-      updateDownloadProgress("画像を準備中", index, items.length);
-      setStatus(`ZIPを準備中 ${index + 1}/${items.length}`);
+      updateDownloadProgress(messages.progress.preparingImages, index, items.length);
+      setStatus(messages.status.zipPreparing(index + 1, items.length));
       try {
         const prepared = await prepareImageDownload(item);
         if (!prepared) {
@@ -1025,33 +1069,33 @@ async function downloadImagesAsZip(sourceItems: ImageMetadata[]): Promise<void> 
         failed += 1;
         console.warn("Failed to prepare image download", error);
       } finally {
-        updateDownloadProgress("画像を準備中", index + 1, items.length);
+        updateDownloadProgress(messages.progress.preparingImages, index + 1, items.length);
       }
     }
 
     if (files.length === 0) {
-      updateDownloadProgress("ZIPに追加できる画像がありません", items.length, items.length);
-      setStatus("ZIPに追加できる画像がありませんでした");
+      updateDownloadProgress(messages.progress.noZipFiles, items.length, items.length);
+      setStatus(messages.status.noZipFiles);
       return;
     }
 
-    updateDownloadProgress("ZIPを作成中", items.length, items.length);
+    updateDownloadProgress(messages.progress.creatingZip, items.length, items.length);
     const zipBytes = createZipArchive(dedupeZipEntries(files));
     const zipFilename = `GPT Image Viewer/${createZipBaseName()}.zip`;
     await downloadBlob(new Blob([blobPartFromBytes(zipBytes)], { type: "application/zip" }), zipFilename);
 
     const downloadedImages = items.length - failed;
-    const parts = [`${downloadedImages}/${items.length}件をZIPで保存しました`];
+    const parts = [messages.status.zipSaved(downloadedImages, items.length)];
     if (sidecars > 0) {
       parts.push(`JSON同梱 ${sidecars}件`);
     }
     if (failed > 0) {
-      parts.push(`失敗 ${failed}件`);
+      parts.push(messages.status.zipFailed(failed));
     }
     if (skipped > 0) {
-      parts.push(`画像未取得をスキップ ${skipped}件`);
+      parts.push(messages.status.zipSkippedMissing(skipped));
     }
-    updateDownloadProgress("保存を開始しました", items.length, items.length);
+    updateDownloadProgress(messages.progress.downloadStarted, items.length, items.length);
     setStatus(parts.join("、"));
   } finally {
     setBusy(false);
@@ -1065,7 +1109,7 @@ async function prepareImageDownload(item: ImageMetadata): Promise<PreparedImageD
 
   const response = await fetch(item.imageUrl, { credentials: "include" });
   if (!response.ok) {
-    throw new Error(`画像リクエストに失敗しました: ${response.status}`);
+    throw new Error(messages.errors.imageRequestFailed(response.status));
   }
 
   const contentType = response.headers.get("content-type") ?? undefined;
@@ -1106,7 +1150,7 @@ function embedImageMetadataSafely(
     return {
       bytes,
       embedded: false,
-      reason: error instanceof Error ? error.message : "メタデータ埋め込みに失敗しました"
+      reason: error instanceof Error ? error.message : messages.errors.metadataEmbeddingFailed
     };
   }
 }
@@ -1122,7 +1166,7 @@ function createSidecarJson(item: ImageMetadata, imageFilename: string, reason?: 
     download: {
       imageFilename,
       embedded: false,
-      reason: reason ?? "メタデータ埋め込みを利用できませんでした"
+      reason: reason ?? messages.errors.metadataEmbeddingUnavailable
     }
   };
   return `${JSON.stringify(payload, null, 2)}\n`;
@@ -1253,7 +1297,7 @@ function exportJson(): void {
   anchor.download = `chatgpt-image-metadata-${formatTimestampForFilename(payload.exportedAt)}.json`;
   anchor.click();
   URL.revokeObjectURL(url);
-  setStatus(`メタデータJSON ${items.length}件を書き出しました`);
+  setStatus(messages.status.metadataExported(items.length));
 }
 
 async function exportDictionary(): Promise<void> {
@@ -1267,13 +1311,13 @@ async function exportDictionary(): Promise<void> {
   anchor.download = `gpt-image-viewer-url-dictionary-${formatTimestampForFilename(payload.exportedAt)}.json`;
   anchor.click();
   URL.revokeObjectURL(url);
-  setStatus(`辞書レコード ${payload.records.length}件を書き出しました`);
+  setStatus(messages.status.dictionaryExported(payload.records.length));
 }
 
 async function importDictionaryFromFile(file: File): Promise<void> {
   const payload = JSON.parse(await file.text()) as unknown;
   const importedCount = await importImageUrlRecords(payload);
-  setStatus(`辞書レコード ${importedCount}件を読み込みました`);
+  setStatus(messages.status.dictionaryImported(importedCount));
   scheduleLoadCurrentConversation({ collectPageImages: false });
 }
 
@@ -1283,19 +1327,18 @@ async function clearDictionary(): Promise<void> {
   }
 
   await clearImageUrlRecords();
-  setStatus("辞書を全削除しました");
-  scheduleLoadCurrentConversation({ collectPageImages: false, status: "辞書なしで再読み込み中" });
+  setStatus(messages.status.dictionaryCleared);
+  scheduleLoadCurrentConversation({ collectPageImages: false, status: messages.status.dictionaryReloading });
 }
 
 function confirmClearDictionary(): Promise<boolean> {
-  return confirmDialog(clearDictionaryDialog, "このブラウザセッションの画像URL辞書を全削除しますか？");
+  return confirmDialog(clearDictionaryDialog, messages.confirm.clearDictionaryFallback);
 }
 
 function confirmDownloadZip(imageCount: number, skippedCount: number): Promise<boolean> {
-  const targetText = "選択した画像";
-  const skippedText = skippedCount > 0 ? ` 画像未取得の ${skippedCount}件はスキップされます。` : "";
-  downloadAllMessage.textContent = `${targetText} ${imageCount}件を1つのZIPファイルとして保存します。${skippedText}`;
-  return confirmDialog(downloadAllDialog, `${targetText} ${imageCount}件をZIPで保存しますか？`);
+  const skippedText = skippedCount > 0 ? messages.confirm.skippedMissingImages(skippedCount) : "";
+  downloadAllMessage.textContent = messages.confirm.zipMessage(imageCount, skippedText);
+  return confirmDialog(downloadAllDialog, messages.confirm.zipFallback(imageCount));
 }
 
 function confirmDialog(dialog: HTMLDialogElement, fallbackMessage: string): Promise<boolean> {
@@ -1387,12 +1430,12 @@ showAttachmentsToggle.addEventListener("change", () => {
   showUserAttachments = showAttachmentsToggle.checked;
   renderCurrentItems();
   const hiddenCount = countHiddenUserAttachments(currentItems);
-  setStatus(showUserAttachments ? "添付画像を表示しています" : `添付画像を非表示にしました（${hiddenCount}件）`);
+  setStatus(showUserAttachments ? messages.status.attachmentsShown : messages.status.attachmentsHidden(hiddenCount));
 });
 selectionToggleButton.addEventListener("click", toggleSelectAllDownloadableItems);
 downloadSelectedButton.addEventListener("click", () => {
   void downloadSelectedImages().catch((error: unknown) => {
-    setStatus("選択画像の保存に失敗しました");
+    setStatus(messages.status.selectedImageSaveFailed);
     console.warn("Failed to download selected images", error);
   });
 });
@@ -1413,7 +1456,7 @@ viewerDialog.addEventListener("keydown", (event) => {
 viewerImage.addEventListener("error", () => {
   viewerImage.hidden = true;
   viewerImageStatus.hidden = false;
-  viewerImageStatus.textContent = "画像を表示できません";
+  viewerImageStatus.textContent = messages.viewer.imageUnavailable;
   viewerCopyImageButton.disabled = true;
 });
 viewerPrevButton.addEventListener("click", () => moveViewer(-1));
@@ -1422,7 +1465,7 @@ viewerPrevEdgeButton.addEventListener("click", () => moveViewer(-1));
 viewerNextEdgeButton.addEventListener("click", () => moveViewer(1));
 viewerDownloadButton.addEventListener("click", () => {
   void downloadCurrentViewerImage().catch((error: unknown) => {
-    setStatus("画像の保存に失敗しました");
+    setStatus(messages.status.imageSaveFailed);
     console.warn("Failed to download viewer image", error);
   });
 });
@@ -1442,8 +1485,8 @@ exportJsonButton.addEventListener("click", exportJson);
 exportDictionaryButton.addEventListener("click", () => {
   moreActionsMenu.open = false;
   void exportDictionary().catch((error: unknown) => {
-    setStatus("辞書の書き出しに失敗しました");
-    renderError(error instanceof Error ? localizeErrorMessage(error.message) : "不明なエラー");
+    setStatus(messages.status.dictionaryExportFailed);
+    renderError(error instanceof Error ? localizeErrorMessage(error.message) : messages.errors.unknown);
   });
 });
 importDictionaryButton.addEventListener("click", () => {
@@ -1453,8 +1496,8 @@ importDictionaryButton.addEventListener("click", () => {
 clearDictionaryButton.addEventListener("click", () => {
   moreActionsMenu.open = false;
   void clearDictionary().catch((error: unknown) => {
-    setStatus("辞書の全削除に失敗しました");
-    renderError(error instanceof Error ? localizeErrorMessage(error.message) : "不明なエラー");
+    setStatus(messages.status.dictionaryClearFailed);
+    renderError(error instanceof Error ? localizeErrorMessage(error.message) : messages.errors.unknown);
   });
 });
 dictionaryFileInput.addEventListener("change", () => {
@@ -1465,8 +1508,8 @@ dictionaryFileInput.addEventListener("change", () => {
   }
 
   void importDictionaryFromFile(file).catch((error: unknown) => {
-    setStatus("辞書の読み込みに失敗しました");
-    renderError(error instanceof Error ? localizeErrorMessage(error.message) : "不明なエラー");
+    setStatus(messages.status.dictionaryImportFailed);
+    renderError(error instanceof Error ? localizeErrorMessage(error.message) : messages.errors.unknown);
   });
 });
 

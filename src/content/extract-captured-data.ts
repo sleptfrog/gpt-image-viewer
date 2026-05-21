@@ -19,7 +19,7 @@ export function extractCapturedConversationItems(options: {
   body: string;
   responseUrl: string;
   capturedAt: string;
-}): { conversationId?: string; items: ImageMetadata[] } {
+}): { conversationId?: string; hasConversationMapping: boolean; items: ImageMetadata[] } {
   const result = parseChatGptResponse({
     responseBody: options.body,
     responseUrl: options.responseUrl,
@@ -28,6 +28,7 @@ export function extractCapturedConversationItems(options: {
 
   return {
     conversationId: result.conversationId,
+    hasConversationMapping: result.diagnostics.some((diagnostic) => diagnostic.message.startsWith("Parsed ")),
     items: result.items.map(stripRaw)
   };
 }
