@@ -1,28 +1,31 @@
-import { parseChatGptResponse } from "../metadata/parse-chatgpt";
-import { parseRecentImageGenResponse } from "../metadata/parse-recent-image-gen";
+import type { ImageMetadata } from "../metadata/types";
 import { stripRawMetadata } from "../metadata/write-metadata";
 import { saveCapturedConversation } from "../shared/capture-store";
-import { recentImageGenToImageUrlRecord, saveImageUrlRecords } from "../shared/image-url-store";
+import type { ImageUrlRecord } from "../shared/image-url-store";
+import { saveImageUrlRecords } from "../shared/image-url-store";
 
-type CaptureConversationMessage = {
-  type: "gpt-image-viewer:capture-conversation";
+type CaptureConversationItemsMessage = {
+  type: "gpt-image-viewer:capture-conversation-items";
   payload?: {
     url?: string;
-    body?: string;
+    conversationId?: string;
     capturedAt?: string;
+    items?: ImageMetadata[];
   };
 };
 
-type CaptureRecentImageGenMessage = {
-  type: "gpt-image-viewer:capture-recent-image-gen";
+type CaptureImageUrlRecordsMessage = {
+  type: "gpt-image-viewer:capture-image-url-records";
   payload?: {
     url?: string;
-    body?: string;
     capturedAt?: string;
+    records?: ImageUrlRecord[];
   };
 };
 
-type CaptureMessage = CaptureConversationMessage | CaptureRecentImageGenMessage;
+type CaptureMessage = CaptureConversationItemsMessage | CaptureImageUrlRecordsMessage;
+
+const MAX_ITEMS = 1000;
 
 function enableSidePanelOnActionClick(): void {
   chrome.sidePanel
@@ -36,8 +39,8 @@ chrome.runtime.onInstalled.addListener(enableSidePanelOnActionClick);
 chrome.runtime.onStartup.addListener(enableSidePanelOnActionClick);
 enableSidePanelOnActionClick();
 
-chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-  if (!isCaptureMessage(message)) {
+chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  if (!isCaptureMessage(message) || !isChatGptSender(sender)) {
     return false;
   }
 
@@ -52,59 +55,136 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
 });
 
 async function handleCaptureMessage(message: CaptureMessage): Promise<number> {
-  if (message.type === "gpt-image-viewer:capture-recent-image-gen") {
-    return handleCapturedRecentImageGen(message);
+  if (message.type === "gpt-image-viewer:capture-image-url-records") {
+    const records = message.payload?.records?.filter(isImageUrlRecord) ?? [];
+    return saveImageUrlRecords(records.slice(0, MAX_ITEMS));
   }
 
-  return handleCapturedConversation(message);
-}
-
-async function handleCapturedConversation(message: CaptureConversationMessage): Promise<number> {
-  const body = message.payload?.body;
-  if (!body) {
-    return 0;
-  }
-
-  const parsed = parseChatGptResponse({
-    responseBody: body,
-    responseUrl: message.payload?.url,
-    capturedAt: message.payload?.capturedAt
-  });
-
-  if (!parsed.conversationId || parsed.items.length === 0) {
+  const items = message.payload?.items?.filter(isImageMetadata) ?? [];
+  const conversationId = message.payload?.conversationId ?? items.find((item) => item.conversationId)?.conversationId;
+  if (!conversationId || items.length === 0) {
     return 0;
   }
 
   await saveCapturedConversation({
-    conversationId: parsed.conversationId,
+    conversationId,
     responseUrl: message.payload?.url,
     capturedAt: message.payload?.capturedAt ?? new Date().toISOString(),
-    items: parsed.items.map(stripRawMetadata)
+    items: items.slice(0, MAX_ITEMS).map(stripRawMetadata)
   });
 
-  return parsed.items.length;
-}
-
-async function handleCapturedRecentImageGen(message: CaptureRecentImageGenMessage): Promise<number> {
-  const body = message.payload?.body;
-  if (!body) {
-    return 0;
-  }
-
-  const parsed = parseRecentImageGenResponse({
-    responseBody: body,
-    capturedAt: message.payload?.capturedAt
-  });
-  const records = parsed.records.map(recentImageGenToImageUrlRecord);
-  await saveImageUrlRecords(records);
-  return records.length;
+  return items.length;
 }
 
 function isCaptureMessage(message: unknown): message is CaptureMessage {
-  if (!message || typeof message !== "object") {
+  if (!isRecord(message)) {
     return false;
   }
 
-  const type = (message as Partial<CaptureMessage>).type;
-  return type === "gpt-image-viewer:capture-conversation" || type === "gpt-image-viewer:capture-recent-image-gen";
+  if (message.type === "gpt-image-viewer:capture-conversation-items") {
+    const payload = isRecord(message.payload) ? message.payload : undefined;
+    return !!payload && isOptionalSafeChatGptUrl(payload.url) && isOptionalShortString(payload.conversationId) && isOptionalIsoLikeString(payload.capturedAt);
+  }
+
+  if (message.type === "gpt-image-viewer:capture-image-url-records") {
+    const payload = isRecord(message.payload) ? message.payload : undefined;
+    return !!payload && isOptionalSafeChatGptUrl(payload.url) && isOptionalIsoLikeString(payload.capturedAt);
+  }
+
+  return false;
+}
+
+function isChatGptSender(sender: chrome.runtime.MessageSender): boolean {
+  const url = sender.tab?.url ?? sender.url;
+  if (!url) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(url);
+    return isChatGptHost(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isImageMetadata(value: unknown): value is ImageMetadata {
+  if (!isRecord(value) || value.source !== "chatgpt-web" || !isIsoLikeString(value.capturedAt)) {
+    return false;
+  }
+
+  return (
+    isOptionalShortString(value.conversationId) &&
+    isOptionalShortString(value.messageId) &&
+    isOptionalImageId(value.imageId) &&
+    isOptionalSafeChatGptUrl(value.imageUrl) &&
+    isOptionalLongString(value.prompt) &&
+    isOptionalLongString(value.revisedPrompt) &&
+    isOptionalLongString(value.caption) &&
+    isOptionalShortString(value.createdAt)
+  );
+}
+
+function isImageUrlRecord(value: unknown): value is ImageUrlRecord {
+  if (!isRecord(value) || value.source !== "recent-image-gen" || !isImageId(value.imageId) || !isIsoLikeString(value.capturedAt)) {
+    return false;
+  }
+
+  return (
+    isOptionalSafeChatGptUrl(value.imageUrl) &&
+    isOptionalSafeChatGptUrl(value.thumbnailUrl) &&
+    isOptionalShortString(value.conversationId) &&
+    isOptionalShortString(value.messageId) &&
+    isOptionalLongString(value.title) &&
+    isOptionalLongString(value.prompt) &&
+    isOptionalShortString(value.createdAt)
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isOptionalShortString(value: unknown): boolean {
+  return value === undefined || (typeof value === "string" && value.length <= 512);
+}
+
+function isOptionalLongString(value: unknown): boolean {
+  return value === undefined || (typeof value === "string" && value.length <= 200_000);
+}
+
+function isIsoLikeString(value: unknown): value is string {
+  return typeof value === "string" && value.length >= 10 && value.length <= 64;
+}
+
+function isOptionalIsoLikeString(value: unknown): boolean {
+  return value === undefined || isIsoLikeString(value);
+}
+
+function isImageId(value: unknown): value is string {
+  return typeof value === "string" && /^file_[A-Za-z0-9_-]+$/.test(value);
+}
+
+function isOptionalImageId(value: unknown): boolean {
+  return value === undefined || isImageId(value);
+}
+
+function isOptionalSafeChatGptUrl(value: unknown): boolean {
+  if (value === undefined) {
+    return true;
+  }
+  if (typeof value !== "string" || value.length > 5000) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    return isChatGptHost(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isChatGptHost(hostname: string): boolean {
+  return hostname === "chatgpt.com" || hostname === "chat.openai.com";
 }

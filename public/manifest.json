@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GPT Image Viewer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Capture and review ChatGPT image metadata locally.",
   "action": {
     "default_icon": {
@@ -25,7 +25,7 @@
         "https://chatgpt.com/*",
         "https://chat.openai.com/*"
       ],
-      "js": ["content-script.js"],
+      "js": ["assets/content-script.js"],
       "run_at": "document_start"
     },
     {
@@ -33,12 +33,11 @@
         "https://chatgpt.com/*",
         "https://chat.openai.com/*"
       ],
-      "js": ["page-hook.js"],
+      "js": ["assets/page-hook.js"],
       "run_at": "document_start",
       "world": "MAIN"
     }
   ],
-  "devtools_page": "src/devtools/devtools.html",
   "host_permissions": [
     "https://chatgpt.com/*",
     "https://chat.openai.com/*"

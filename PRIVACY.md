@@ -33,6 +33,12 @@ GPT Image Viewer does not send prompts, images, metadata, or conversation data t
 
 Metadata and image URL mappings may be stored temporarily in Chrome extension storage. Saved images and sidecar JSON files are stored locally only when the user chooses to save them.
 
+Saved image files and sidecar JSON files may include prompts, captions, conversation IDs, message IDs, image IDs, and image URLs. If the user shares those saved files, that metadata may also be shared.
+
+### Limited Use
+
+GPT Image Viewer uses handled data only for its single purpose: viewing and saving ChatGPT generated images with related metadata. The developer does not use or transfer user data for purposes unrelated to this purpose, does not sell user data, and does not use user data for creditworthiness or lending purposes. GPT Image Viewer is intended to comply with the Chrome Web Store User Data Policy, including Limited Use requirements.
+
 ### Remote code
 
 GPT Image Viewer does not execute remotely hosted code. Extension code is bundled with the extension package.
@@ -71,6 +77,12 @@ GPT Image Viewer は、プロンプト、画像、メタデータ、会話デー
 ### 保存
 
 メタデータと画像URLの対応情報は、Chrome拡張機能のストレージに一時的に保存される場合があります。保存された画像とsidecar JSONファイルは、ユーザーが保存操作を行った場合にのみローカルに保存されます。
+
+保存された画像ファイルやsidecar JSONファイルには、プロンプト、キャプション、conversation ID、message ID、image ID、画像URLが含まれる場合があります。ユーザーがそれらの保存物を共有した場合、これらのメタデータも共有される可能性があります。
+
+### 限定使用
+
+GPT Image Viewer は、扱うデータを、ChatGPT生成画像と関連メタデータを閲覧・保存するという単一の目的にのみ使用します。開発者は、この目的と関係のない目的でユーザーデータを使用または転送せず、ユーザーデータを販売せず、信用力判断または融資目的でユーザーデータを使用しません。GPT Image Viewer は、Limited Use 要件を含む Chrome Web Store User Data Policy に従うことを意図しています。
 
 ### リモートコード
 
