@@ -20,18 +20,32 @@
       </header>
 
       <section class="toolbar" aria-label="操作">
-        <button id="refresh" type="button">更新</button>
-        <button id="selection-toggle" type="button" disabled>全選択</button>
-        <button id="download-selected" type="button" disabled>選択した画像を保存</button>
-        <details id="more-actions" class="toolbar-menu">
-          <summary aria-label="その他の操作" title="その他の操作">⋮</summary>
-          <div class="toolbar-menu-panel">
-            <button id="export-json" type="button" disabled>メタデータJSONを書き出し</button>
-            <button id="export-dictionary" type="button">辞書を書き出し</button>
-            <button id="import-dictionary" type="button">辞書を読み込み</button>
-            <button id="clear-dictionary" type="button">辞書を全削除</button>
-          </div>
-        </details>
+        <div class="toolbar-group toolbar-global" aria-label="全体操作">
+          <button id="refresh" class="toolbar-button" type="button">更新</button>
+          <details id="more-actions" class="toolbar-menu">
+            <summary aria-label="その他の操作" title="その他の操作">⋮</summary>
+            <div class="toolbar-menu-panel">
+              <button id="export-json" type="button" disabled>メタデータJSONを書き出し</button>
+              <button id="export-dictionary" type="button">辞書を書き出し</button>
+              <button id="import-dictionary" type="button">辞書を読み込み</button>
+              <button id="clear-dictionary" type="button">辞書を全削除</button>
+            </div>
+          </details>
+        </div>
+
+        <div class="toolbar-group toolbar-view" aria-label="表示設定">
+          <label class="attachment-switch">
+            <span class="attachment-switch-text">添付画像</span>
+            <input id="show-attachments" type="checkbox" />
+            <span class="attachment-switch-track" aria-hidden="true"></span>
+          </label>
+        </div>
+
+        <div class="toolbar-group toolbar-selection" aria-label="選択操作">
+          <span id="selection-summary" class="selection-summary" aria-live="polite">0 / 0件選択</span>
+          <button id="selection-toggle" class="toolbar-button" type="button" disabled>全選択</button>
+          <button id="download-selected" class="toolbar-button toolbar-primary" type="button" disabled>選択した画像を保存</button>
+        </div>
         <input id="dictionary-file" type="file" accept="application/json,.json" hidden />
       </section>
 
@@ -110,6 +124,14 @@
             <time id="viewer-created-at"></time>
           </div>
 
+          <section class="viewer-text-section" aria-labelledby="viewer-user-input-label">
+            <div class="viewer-text-heading">
+              <h3 id="viewer-user-input-label">ユーザー入力</h3>
+              <button id="viewer-copy-user-input" class="viewer-copy-text" type="button" aria-label="ユーザー入力をコピー">コピー</button>
+            </div>
+            <p id="viewer-user-input" class="viewer-full-text"></p>
+          </section>
+
           <section class="viewer-text-section" aria-labelledby="viewer-caption-label">
             <div class="viewer-text-heading">
               <h3 id="viewer-caption-label">キャプション</h3>
@@ -120,8 +142,8 @@
 
           <section class="viewer-text-section" aria-labelledby="viewer-prompt-label">
             <div class="viewer-text-heading">
-              <h3 id="viewer-prompt-label">プロンプト</h3>
-              <button id="viewer-copy-prompt" class="viewer-copy-text" type="button" aria-label="プロンプトをコピー">コピー</button>
+              <h3 id="viewer-prompt-label">生成プロンプト</h3>
+              <button id="viewer-copy-prompt" class="viewer-copy-text" type="button" aria-label="生成プロンプトをコピー">コピー</button>
             </div>
             <p id="viewer-prompt" class="viewer-full-text"></p>
           </section>

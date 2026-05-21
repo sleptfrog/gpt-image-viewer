@@ -26,6 +26,7 @@ button {
   font: inherit;
   min-height: 32px;
   padding: 0 12px;
+  user-select: none;
 }
 
 button:hover:not(:disabled) {
@@ -86,21 +87,132 @@ h1 {
 }
 
 .toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: stretch;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(140px, 1fr);
   gap: 8px;
   border-bottom: 1px solid color-mix(in srgb, CanvasText 10%, transparent);
   padding: 10px 14px;
 }
 
-.toolbar button {
-  flex: 1 1 120px;
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.toolbar-global {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.toolbar-view {
+  grid-column: 2;
+  grid-row: 1;
+  justify-content: flex-end;
+}
+
+.toolbar-selection {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  border-top: 1px solid color-mix(in srgb, CanvasText 8%, transparent);
+  padding-top: 8px;
+}
+
+.toolbar-button {
+  flex: 0 0 auto;
+  min-width: 88px;
+}
+
+.toolbar-primary {
+  border-color: color-mix(in srgb, Highlight 45%, CanvasText 16%);
+  background: color-mix(in srgb, Highlight 16%, Canvas);
+  font-weight: 650;
+}
+
+.selection-summary {
+  margin-right: auto;
+  color: color-mix(in srgb, CanvasText 64%, transparent);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.attachment-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  color: color-mix(in srgb, CanvasText 72%, transparent);
+  cursor: pointer;
+  font-size: 12px;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.attachment-switch:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.attachment-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+}
+
+.attachment-switch-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 24px;
+  border: 1px solid color-mix(in srgb, CanvasText 24%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, CanvasText 14%, Canvas);
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.attachment-switch-track::before {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: CanvasText;
+  content: "";
+  opacity: 0.72;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.attachment-switch input:checked + .attachment-switch-track {
+  border-color: color-mix(in srgb, Highlight 62%, CanvasText 12%);
+  background: color-mix(in srgb, Highlight 38%, Canvas);
+}
+
+.attachment-switch input:checked + .attachment-switch-track::before {
+  opacity: 1;
+  transform: translateX(18px);
+}
+
+.attachment-switch input:focus-visible + .attachment-switch-track {
+  outline: 2px solid Highlight;
+  outline-offset: 2px;
 }
 
 .toolbar-menu {
   position: relative;
   flex: 0 0 auto;
+  user-select: none;
 }
 
 .toolbar-menu summary {
@@ -127,7 +239,7 @@ h1 {
 
 .toolbar-menu-panel {
   position: absolute;
-  right: 0;
+  left: 50%;
   z-index: 10;
   display: grid;
   width: min(260px, calc(100vw - 28px));
@@ -138,12 +250,42 @@ h1 {
   background: Canvas;
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
   padding: 8px;
+  transform: translateX(-50%);
 }
 
 .toolbar-menu-panel button {
   flex: none;
   width: 100%;
   text-align: left;
+  user-select: none;
+}
+
+@media (width <= 420px) {
+  .toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar-global,
+  .toolbar-view,
+  .toolbar-selection {
+    grid-column: 1;
+  }
+
+  .toolbar-view {
+    justify-content: flex-start;
+  }
+
+  .toolbar-selection {
+    justify-content: stretch;
+  }
+
+  .selection-summary {
+    flex: 1 0 100%;
+  }
+
+  .toolbar-selection .toolbar-button {
+    flex: 1 1 130px;
+  }
 }
 
 .download-progress {
@@ -322,6 +464,11 @@ button.thumb:focus-visible {
   color: color-mix(in srgb, CanvasText 76%, transparent);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.image-role-text {
+  color: color-mix(in srgb, CanvasText 58%, transparent);
+  font-weight: 650;
 }
 
 .meta-row {

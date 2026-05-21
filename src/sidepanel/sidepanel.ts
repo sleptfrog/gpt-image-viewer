@@ -43,6 +43,8 @@ const countEl = queryRequired<HTMLSpanElement>("#item-count");
 const conversationIdEl = queryRequired<HTMLSpanElement>("#conversation-id");
 const contentEl = queryRequired<HTMLElement>("#content");
 const refreshButton = queryRequired<HTMLButtonElement>("#refresh");
+const showAttachmentsToggle = queryRequired<HTMLInputElement>("#show-attachments");
+const selectionSummaryEl = queryRequired<HTMLSpanElement>("#selection-summary");
 const selectionToggleButton = queryRequired<HTMLButtonElement>("#selection-toggle");
 const downloadSelectedButton = queryRequired<HTMLButtonElement>("#download-selected");
 const moreActionsMenu = queryRequired<HTMLDetailsElement>("#more-actions");
@@ -71,14 +73,17 @@ const viewerDownloadButton = queryRequired<HTMLButtonElement>("#viewer-download"
 const viewerCopyImageButton = queryRequired<HTMLButtonElement>("#viewer-copy-image");
 const viewerImageIdEl = queryRequired<HTMLSpanElement>("#viewer-image-id");
 const viewerCreatedAtEl = queryRequired<HTMLTimeElement>("#viewer-created-at");
+const viewerUserInputEl = queryRequired<HTMLParagraphElement>("#viewer-user-input");
 const viewerCaptionEl = queryRequired<HTMLParagraphElement>("#viewer-caption");
 const viewerPromptEl = queryRequired<HTMLParagraphElement>("#viewer-prompt");
+const viewerCopyUserInputButton = queryRequired<HTMLButtonElement>("#viewer-copy-user-input");
 const viewerCopyCaptionButton = queryRequired<HTMLButtonElement>("#viewer-copy-caption");
 const viewerCopyPromptButton = queryRequired<HTMLButtonElement>("#viewer-copy-prompt");
 
 let currentItems: ImageMetadata[] = [];
 let currentPreviewUrls = new Map<string, string>();
 let selectedItemKeys = new Set<string>();
+let showUserAttachments = false;
 let loadSequence = 0;
 let autoRefreshTimer: number | undefined;
 let pendingLoadOptions: LoadOptions = {};
@@ -175,17 +180,19 @@ async function loadCurrentConversation(options: LoadOptions = {}): Promise<void>
     currentPreviewUrls = previewUrlMapFromRecords(imageUrlRecords);
     imageUrls = imageUrlMapFromRecords(imageUrlRecords);
 
+    const visibleItems = getVisibleItems();
     setStatus(
       formatLoadedStatus(
         loaded.statusPrefix,
-        currentItems.length,
+        visibleItems.length,
         pageImages.length,
-        countItemsWithUrlRecords(currentItems, imageUrlRecords),
+        countItemsWithUrlRecords(visibleItems, imageUrlRecords),
         imageUrlRecords.size,
-        collectMissingImageIds(currentItems, imageUrls).length
+        collectMissingImageIds(visibleItems, imageUrls).length,
+        countHiddenUserAttachments(currentItems)
       )
     );
-    renderItems(currentItems);
+    renderCurrentItems();
   } catch (error) {
     currentItems = [];
     currentPreviewUrls = new Map();
@@ -342,7 +349,8 @@ function formatLoadedStatus(
   pageUrlCount: number,
   matchedUrlRecordCount: number,
   storedUrlRecordCount: number,
-  missingUrlCount: number
+  missingUrlCount: number,
+  hiddenAttachmentCount: number
 ): string {
   const parts = [
     `${statusPrefix}: ${itemCount}件`,
@@ -352,6 +360,10 @@ function formatLoadedStatus(
 
   if (missingUrlCount > 0) {
     parts.push(`画像未取得 ${missingUrlCount}件`);
+  }
+
+  if (!showUserAttachments && hiddenAttachmentCount > 0) {
+    parts.push(`添付画像を非表示 ${hiddenAttachmentCount}件`);
   }
 
   return parts.join(", ");
@@ -457,14 +469,30 @@ function sortItems(items: ImageMetadata[]): ImageMetadata[] {
 
 function setBusy(isBusy: boolean): void {
   refreshButton.disabled = isBusy;
+  showAttachmentsToggle.disabled = isBusy;
   updateSelectionControls(isBusy);
-  exportJsonButton.disabled = isBusy || currentItems.length === 0;
+  exportJsonButton.disabled = isBusy || getVisibleItems().length === 0;
   exportDictionaryButton.disabled = isBusy;
   importDictionaryButton.disabled = isBusy;
   clearDictionaryButton.disabled = isBusy;
   if (isBusy) {
     moreActionsMenu.open = false;
   }
+}
+
+function getVisibleItems(): ImageMetadata[] {
+  if (showUserAttachments) {
+    return currentItems;
+  }
+  return currentItems.filter((item) => item.imageRole !== "user_attachment");
+}
+
+function countHiddenUserAttachments(items: ImageMetadata[]): number {
+  return items.filter((item) => item.imageRole === "user_attachment").length;
+}
+
+function renderCurrentItems(): void {
+  renderItems(getVisibleItems());
 }
 
 function renderItems(items: ImageMetadata[]): void {
@@ -474,7 +502,12 @@ function renderItems(items: ImageMetadata[]): void {
   exportJsonButton.disabled = items.length === 0;
 
   if (items.length === 0) {
-    contentEl.replaceChildren(renderEmpty("画像メタデータはまだ見つかっていません"));
+    const hiddenCount = countHiddenUserAttachments(currentItems);
+    const message =
+      !showUserAttachments && currentItems.length > 0 && hiddenCount > 0
+        ? `添付画像 ${hiddenCount}件は非表示です。「添付画像を表示」をオンにすると表示できます。`
+        : "画像メタデータはまだ見つかっていません";
+    contentEl.replaceChildren(renderEmpty(message));
     syncViewerAfterItemsChange();
     return;
   }
@@ -574,7 +607,21 @@ function renderImageMain(item: ImageMetadata): HTMLElement {
   heading.append(selectLabel, imageId, time);
   main.append(heading);
 
-  const primaryText = item.caption ?? item.prompt;
+  if (item.imageRole === "user_attachment") {
+    const role = document.createElement("p");
+    role.className = "image-text image-role-text";
+    role.textContent = "添付画像";
+    main.append(role);
+  }
+
+  if (item.userInput) {
+    const text = document.createElement("p");
+    text.className = "image-text";
+    text.textContent = `ユーザー入力: ${item.userInput}`;
+    main.append(text);
+  }
+
+  const primaryText = item.caption ? `キャプション: ${item.caption}` : item.prompt ? `生成プロンプト: ${item.prompt}` : undefined;
   if (primaryText) {
     const text = document.createElement("p");
     text.className = "image-text";
@@ -601,11 +648,11 @@ function renderImageMain(item: ImageMetadata): HTMLElement {
 }
 
 function getDownloadableItems(): ImageMetadata[] {
-  return currentItems.filter((item) => Boolean(item.imageUrl));
+  return getVisibleItems().filter((item) => Boolean(item.imageUrl));
 }
 
 function getSelectedDownloadableItems(): ImageMetadata[] {
-  return currentItems.filter((item) => item.imageUrl && selectedItemKeys.has(imageItemKey(item)));
+  return getVisibleItems().filter((item) => item.imageUrl && selectedItemKeys.has(imageItemKey(item)));
 }
 
 function areAllDownloadableItemsSelected(): boolean {
@@ -615,10 +662,12 @@ function areAllDownloadableItemsSelected(): boolean {
 
 function updateSelectionControls(isBusy: boolean): void {
   const downloadableItems = getDownloadableItems();
+  const selectedItems = getSelectedDownloadableItems();
   const allSelected = areAllDownloadableItemsSelected();
+  selectionSummaryEl.textContent = `${selectedItems.length} / ${downloadableItems.length}件選択`;
   selectionToggleButton.textContent = allSelected ? "全選択解除" : "全選択";
   selectionToggleButton.disabled = isBusy || downloadableItems.length === 0;
-  downloadSelectedButton.disabled = isBusy || getSelectedDownloadableItems().length === 0;
+  downloadSelectedButton.disabled = isBusy || selectedItems.length === 0;
 }
 
 function pruneSelectedItems(items: ImageMetadata[]): void {
@@ -633,7 +682,7 @@ function setItemSelected(item: ImageMetadata, isSelected: boolean): void {
   } else {
     selectedItemKeys.delete(key);
   }
-  renderItems(currentItems);
+  renderCurrentItems();
   const selectedCount = getSelectedDownloadableItems().length;
   setStatus(selectedCount > 0 ? `${selectedCount}件を選択中` : "選択を解除しました");
 }
@@ -647,18 +696,18 @@ function toggleSelectAllDownloadableItems(): void {
 
   if (areAllDownloadableItemsSelected()) {
     selectedItemKeys = new Set();
-    renderItems(currentItems);
+    renderCurrentItems();
     setStatus("全選択を解除しました");
     return;
   }
 
   selectedItemKeys = new Set(downloadableItems.map(imageItemKey));
-  renderItems(currentItems);
+  renderCurrentItems();
   setStatus(`${downloadableItems.length}件を全選択しました`);
 }
 
 function getViewerItems(): ImageMetadata[] {
-  return currentItems.filter((item) => Boolean(item.imageUrl));
+  return getVisibleItems().filter((item) => Boolean(item.imageUrl));
 }
 
 function openViewerForItem(item: ImageMetadata): void {
@@ -709,6 +758,7 @@ function renderViewer(): void {
   viewerIndex = clampViewerIndex(viewerIndex, viewerItems.length);
   const item = viewerItems[viewerIndex];
   const imageUrl = item.imageUrl ?? "";
+  const userInput = item.userInput ?? "";
   const caption = item.caption ?? "";
   const prompt = item.prompt ?? "";
 
@@ -716,8 +766,10 @@ function renderViewer(): void {
   viewerImageIdEl.textContent = item.imageId ?? item.messageId ?? "画像";
   viewerCreatedAtEl.textContent = item.createdAt ? formatDisplayDate(item.createdAt) : "";
   viewerCreatedAtEl.dateTime = item.createdAt ?? "";
+  viewerUserInputEl.textContent = userInput || "ユーザー入力は取得されていません";
   viewerCaptionEl.textContent = caption || "キャプションは取得されていません";
-  viewerPromptEl.textContent = prompt || "プロンプトは取得されていません";
+  viewerPromptEl.textContent = prompt || "生成プロンプトは取得されていません";
+  viewerCopyUserInputButton.disabled = !userInput;
   viewerCopyCaptionButton.disabled = !caption;
   viewerCopyPromptButton.disabled = !prompt;
   viewerDownloadButton.disabled = !imageUrl;
@@ -809,10 +861,10 @@ async function copyCurrentViewerImage(): Promise<void> {
   }
 }
 
-async function copyViewerText(kind: "caption" | "prompt"): Promise<void> {
+async function copyViewerText(kind: "caption" | "prompt" | "userInput"): Promise<void> {
   const item = currentViewerItem();
-  const value = kind === "caption" ? item?.caption : item?.prompt;
-  const label = kind === "caption" ? "キャプション" : "プロンプト";
+  const value = kind === "caption" ? item?.caption : kind === "prompt" ? item?.prompt : item?.userInput;
+  const label = kind === "caption" ? "キャプション" : kind === "prompt" ? "生成プロンプト" : "ユーザー入力";
   if (!value) {
     return;
   }
@@ -933,7 +985,7 @@ async function downloadPreparedImage(prepared: PreparedImageDownload): Promise<v
 }
 
 async function downloadSelectedImages(): Promise<void> {
-  await downloadImagesAsZip(currentItems.filter((item) => selectedItemKeys.has(imageItemKey(item))));
+  await downloadImagesAsZip(getSelectedDownloadableItems());
 }
 
 async function downloadImagesAsZip(sourceItems: ImageMetadata[]): Promise<void> {
@@ -1185,12 +1237,13 @@ function extensionFromUrl(imageUrl?: string): string | undefined {
 }
 
 function exportJson(): void {
-  if (currentItems.length === 0) {
+  const items = getVisibleItems();
+  if (items.length === 0) {
     return;
   }
   moreActionsMenu.open = false;
 
-  const payload = createMetadataExport(currentItems);
+  const payload = createMetadataExport(items);
   const blob = new Blob([`${JSON.stringify(payload, null, 2)}\n`], {
     type: "application/json"
   });
@@ -1200,7 +1253,7 @@ function exportJson(): void {
   anchor.download = `chatgpt-image-metadata-${formatTimestampForFilename(payload.exportedAt)}.json`;
   anchor.click();
   URL.revokeObjectURL(url);
-  setStatus(`メタデータJSON ${currentItems.length}件を書き出しました`);
+  setStatus(`メタデータJSON ${items.length}件を書き出しました`);
 }
 
 async function exportDictionary(): Promise<void> {
@@ -1330,6 +1383,12 @@ refreshButton.addEventListener("click", () => {
     pageImageScanDelayMs: AUTO_PAGE_IMAGE_SCAN_DELAY_MS
   });
 });
+showAttachmentsToggle.addEventListener("change", () => {
+  showUserAttachments = showAttachmentsToggle.checked;
+  renderCurrentItems();
+  const hiddenCount = countHiddenUserAttachments(currentItems);
+  setStatus(showUserAttachments ? "添付画像を表示しています" : `添付画像を非表示にしました（${hiddenCount}件）`);
+});
 selectionToggleButton.addEventListener("click", toggleSelectAllDownloadableItems);
 downloadSelectedButton.addEventListener("click", () => {
   void downloadSelectedImages().catch((error: unknown) => {
@@ -1369,6 +1428,9 @@ viewerDownloadButton.addEventListener("click", () => {
 });
 viewerCopyImageButton.addEventListener("click", () => {
   void copyCurrentViewerImage();
+});
+viewerCopyUserInputButton.addEventListener("click", () => {
+  void copyViewerText("userInput");
 });
 viewerCopyCaptionButton.addEventListener("click", () => {
   void copyViewerText("caption");
