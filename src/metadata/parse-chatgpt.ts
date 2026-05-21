@@ -23,6 +23,14 @@ type PromptCandidate = {
   createTime?: number;
 };
 
+type UserInputCandidate = {
+  nodeId: string;
+  messageId?: string;
+  userInput: string;
+  createdAt?: string;
+  createTime?: number;
+};
+
 type ImageCandidate = {
   item: ImageMetadata;
   nodeId: string;
@@ -196,11 +204,13 @@ function parseConversationDocument(
   const conversationId = asString(document.conversation_id) ?? extractConversationIdFromUrl(context.responseUrl);
   const nodes = normalizeConversationNodes(document.mapping);
   const promptCandidates = collectPromptCandidates(nodes);
+  const userInputCandidates = collectUserInputCandidates(nodes);
   const imageCandidates = collectImageCandidates(nodes, {
     capturedAt: context.capturedAt,
     conversationId,
     imageUrls: context.imageUrls,
-    promptCandidates
+    promptCandidates,
+    userInputCandidates
   });
 
   const merged = new Map<string, ImageMetadata>();
@@ -266,6 +276,32 @@ function collectPromptCandidates(nodes: Map<string, ConversationNode>): PromptCa
   return candidates;
 }
 
+function collectUserInputCandidates(nodes: Map<string, ConversationNode>): UserInputCandidate[] {
+  const candidates: UserInputCandidate[] = [];
+
+  for (const node of nodes.values()) {
+    if (!node.message || getAuthorRole(node.message) !== "user") {
+      continue;
+    }
+
+    const userInput = extractUserInputFromMessage(node.message);
+    if (!userInput) {
+      continue;
+    }
+
+    const createTime = asNumber(node.message.create_time);
+    candidates.push({
+      nodeId: node.nodeId,
+      messageId: asString(node.message.id),
+      userInput,
+      createTime,
+      createdAt: timestampToIso(createTime)
+    });
+  }
+
+  return candidates;
+}
+
 function collectImageCandidates(
   nodes: Map<string, ConversationNode>,
   context: {
@@ -273,6 +309,7 @@ function collectImageCandidates(
     conversationId?: string;
     imageUrls: ReadonlyMap<string, string>;
     promptCandidates: PromptCandidate[];
+    userInputCandidates: UserInputCandidate[];
   }
 ): ImageCandidate[] {
   const candidates: ImageCandidate[] = [];
@@ -291,6 +328,8 @@ function collectImageCandidates(
     const createTime = asNumber(node.message.create_time);
     const prompt = findPromptForNode(node, nodes, context.promptCandidates, createTime);
     const caption = extractCaptionFromMessage(node.message);
+    const userInput = findUserInputForNode(node, nodes, context.userInputCandidates, createTime);
+    const imageRole = classifyImageRole(node.message, prompt, caption);
 
     for (const imageId of imageIds) {
       candidates.push({
@@ -305,6 +344,8 @@ function collectImageCandidates(
           prompt: prompt?.prompt,
           revisedPrompt: prompt?.revisedPrompt,
           caption,
+          userInput: userInput?.userInput,
+          imageRole,
           createdAt: timestampToIso(createTime) ?? prompt?.createdAt,
           capturedAt: context.capturedAt
         }
@@ -313,6 +354,46 @@ function collectImageCandidates(
   }
 
   return candidates;
+}
+
+function findUserInputForNode(
+  node: ConversationNode,
+  nodes: Map<string, ConversationNode>,
+  userInputs: UserInputCandidate[],
+  imageCreateTime?: number
+): UserInputCandidate | undefined {
+  const byNodeId = new Map(userInputs.map((userInput) => [userInput.nodeId, userInput]));
+  let current: ConversationNode | undefined = node;
+
+  for (let depth = 0; current && depth < 20; depth += 1) {
+    const directInput = byNodeId.get(current.nodeId);
+    if (directInput) {
+      return directInput;
+    }
+
+    current = current.parent ? nodes.get(current.parent) : undefined;
+  }
+
+  if (imageCreateTime === undefined || userInputs.length === 0) {
+    return undefined;
+  }
+
+  let bestInput: UserInputCandidate | undefined;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const userInput of userInputs) {
+    if (userInput.createTime === undefined || userInput.createTime > imageCreateTime) {
+      continue;
+    }
+
+    const distance = imageCreateTime - userInput.createTime;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestInput = userInput;
+    }
+  }
+
+  return bestInput;
 }
 
 function findPromptForNode(
@@ -368,6 +449,86 @@ function extractPromptFromMessage(message: JsonRecord): Pick<PromptCandidate, "p
   }
 
   return {};
+}
+
+function extractUserInputFromMessage(message: JsonRecord): string | undefined {
+  const content = isRecord(message.content) ? message.content : undefined;
+  const texts = collectUserMessageTexts(content).map(normalizeText).filter((text) => text.length > 0);
+  return dedupeStrings(texts).join("\n\n") || undefined;
+}
+
+function collectUserMessageTexts(content: JsonRecord | undefined): string[] {
+  const texts: string[] = [];
+  const contentText = asString(content?.text);
+  if (contentText) {
+    texts.push(contentText);
+  }
+
+  const parts = Array.isArray(content?.parts) ? content.parts : [];
+  for (const part of parts) {
+    if (typeof part === "string") {
+      texts.push(part);
+      continue;
+    }
+
+    if (!isRecord(part) || asString(part.content_type) === "image_asset_pointer") {
+      continue;
+    }
+
+    const text = asString(part.text) ?? asString(part.content) ?? asString(part.value);
+    if (text) {
+      texts.push(text);
+    }
+  }
+
+  return texts;
+}
+
+function normalizeText(text: string): string {
+  return text
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[\t ]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function dedupeStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+
+  for (const value of values) {
+    if (seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    deduped.push(value);
+  }
+
+  return deduped;
+}
+
+function classifyImageRole(
+  message: JsonRecord,
+  prompt: PromptCandidate | undefined,
+  caption: string | undefined
+): ImageMetadata["imageRole"] {
+  const role = getAuthorRole(message);
+  if (role === "user") {
+    return "user_attachment";
+  }
+
+  if (role === "tool" || role === "assistant") {
+    return "generated";
+  }
+
+  return prompt?.prompt || prompt?.revisedPrompt || caption ? "generated" : "unknown";
+}
+
+function getAuthorRole(message: JsonRecord): string | undefined {
+  const author = isRecord(message.author) ? message.author : undefined;
+  return asString(author?.role);
 }
 
 function parsePromptJsonText(text: string): Pick<PromptCandidate, "prompt" | "revisedPrompt"> {
@@ -509,6 +670,7 @@ function parseLooseImageMetadata(
     imageUrl: context.imageUrls.get(imageId),
     prompt: prompts.at(0),
     caption: captions.at(0),
+    imageRole: captions.length > 0 || prompts.length > 0 ? "generated" : "unknown",
     capturedAt: context.capturedAt
   }));
 }
@@ -576,6 +738,8 @@ function mergeMetadata(existing: ImageMetadata, incoming: ImageMetadata): ImageM
     prompt: incoming.prompt ?? existing.prompt,
     revisedPrompt: incoming.revisedPrompt ?? existing.revisedPrompt,
     caption: preferLonger(incoming.caption, existing.caption),
+    userInput: preferLonger(incoming.userInput, existing.userInput),
+    imageRole: mergeImageRole(existing.imageRole, incoming.imageRole),
     createdAt: earliestIso(existing.createdAt, incoming.createdAt),
     capturedAt: incoming.capturedAt
   };
@@ -587,8 +751,26 @@ function metadataScore(item: ImageMetadata): number {
     item.imageUrl ? 1 : 0,
     item.prompt ? 4 : 0,
     item.revisedPrompt ? 2 : 0,
-    item.caption ? 3 : 0
+    item.caption ? 3 : 0,
+    item.userInput ? 2 : 0,
+    item.imageRole && item.imageRole !== "unknown" ? 1 : 0
   ].reduce((sum, value) => sum + value, 0);
+}
+
+function mergeImageRole(
+  existing: ImageMetadata["imageRole"],
+  incoming: ImageMetadata["imageRole"]
+): ImageMetadata["imageRole"] {
+  if (existing === incoming) {
+    return existing;
+  }
+  if (incoming === "generated" || existing === "generated") {
+    return "generated";
+  }
+  if (incoming === "user_attachment" || existing === "user_attachment") {
+    return "user_attachment";
+  }
+  return incoming ?? existing;
 }
 
 function preferLonger(first?: string, second?: string): string | undefined {

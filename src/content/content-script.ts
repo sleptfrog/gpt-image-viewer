@@ -8,6 +8,8 @@ type ImageMetadataMessageItem = {
   prompt?: string;
   revisedPrompt?: string;
   caption?: string;
+  userInput?: string;
+  imageRole?: "generated" | "user_attachment" | "unknown";
   createdAt?: string;
   capturedAt: string;
 };
@@ -121,6 +123,8 @@ function isImageMetadataMessageItem(value: unknown): value is ImageMetadataMessa
     isOptionalLongString(value.prompt) &&
     isOptionalLongString(value.revisedPrompt) &&
     isOptionalLongString(value.caption) &&
+    isOptionalLongString(value.userInput) &&
+    isOptionalImageRole(value.imageRole) &&
     isOptionalShortString(value.createdAt)
   );
 }
@@ -163,6 +167,10 @@ function isImageId(value: unknown): value is string {
 
 function isOptionalImageId(value: unknown): boolean {
   return value === undefined || isImageId(value);
+}
+
+function isOptionalImageRole(value: unknown): boolean {
+  return value === undefined || value === "generated" || value === "user_attachment" || value === "unknown";
 }
 
 function isSafeUrl(value: unknown): boolean {

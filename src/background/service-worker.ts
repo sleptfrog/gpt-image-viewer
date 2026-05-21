@@ -121,6 +121,8 @@ function isImageMetadata(value: unknown): value is ImageMetadata {
     isOptionalLongString(value.prompt) &&
     isOptionalLongString(value.revisedPrompt) &&
     isOptionalLongString(value.caption) &&
+    isOptionalLongString(value.userInput) &&
+    isOptionalImageRole(value.imageRole) &&
     isOptionalShortString(value.createdAt)
   );
 }
@@ -167,6 +169,10 @@ function isImageId(value: unknown): value is string {
 
 function isOptionalImageId(value: unknown): boolean {
   return value === undefined || isImageId(value);
+}
+
+function isOptionalImageRole(value: unknown): boolean {
+  return value === undefined || value === "generated" || value === "user_attachment" || value === "unknown";
 }
 
 function isOptionalSafeChatGptUrl(value: unknown): boolean {

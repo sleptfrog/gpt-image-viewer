@@ -28,6 +28,8 @@ describe("parseChatGptResponse", () => {
       imageId: "file_sanitized_image_1",
       prompt: "Draw a clean test image with three colored geometric shapes on a white desk.",
       caption: "A clean test image with three colored geometric shapes on a white desk.",
+      userInput: "Create a simple test image.",
+      imageRole: "generated",
       createdAt: "2023-11-14T22:13:22.000Z",
       capturedAt: "2026-05-19T00:00:00.000Z"
     });
@@ -43,6 +45,50 @@ describe("parseChatGptResponse", () => {
     expect(result.items).toHaveLength(1);
     expect(result.items[0].messageId).toBe("caption-image-message");
     expect(result.items[0].caption).toContain("geometric shapes");
+    expect(result.items[0].userInput).toBe("Create a simple test image.");
+    expect(result.items[0].imageRole).toBe("generated");
+  });
+
+  it("classifies user attached images separately from generated images", () => {
+    const result = parseChatGptResponse({
+      responseBody: JSON.stringify({
+        conversation_id: "conv_user_attachment",
+        mapping: {
+          "user-attachment-node": {
+            parent: null,
+            children: [],
+            message: {
+              id: "user-attachment-message",
+              author: { role: "user" },
+              create_time: 1700000200,
+              content: {
+                content_type: "multimodal_text",
+                parts: [
+                  "Use this as a reference image.",
+                  {
+                    content_type: "image_asset_pointer",
+                    asset_pointer: "sediment://file_user_attachment_1",
+                    metadata: {}
+                  }
+                ]
+              },
+              metadata: {}
+            }
+          }
+        }
+      }),
+      responseUrl: "https://chatgpt.com/backend-api/conversation/conv_user_attachment",
+      capturedAt: "2026-05-19T00:00:00.000Z"
+    });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      conversationId: "conv_user_attachment",
+      messageId: "user-attachment-message",
+      imageId: "file_user_attachment_1",
+      userInput: "Use this as a reference image.",
+      imageRole: "user_attachment"
+    });
   });
 
   it("applies estuary image URLs when they are known", () => {
@@ -97,7 +143,8 @@ describe("parseChatGptResponse", () => {
       conversationId: "conv_hidden_asset",
       messageId: "hidden-image-message",
       imageId: "file_hidden_history_image",
-      caption: "Hidden history image"
+      caption: "Hidden history image",
+      imageRole: "generated"
     });
   });
 

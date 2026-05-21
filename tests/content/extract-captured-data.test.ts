@@ -23,6 +23,8 @@ describe("content capture extraction", () => {
       imageId: "file_sanitized_image_1",
       prompt: "Draw a clean test image with three colored geometric shapes on a white desk.",
       caption: "A clean test image with three colored geometric shapes on a white desk.",
+      userInput: "Create a simple test image.",
+      imageRole: "generated",
       createdAt: "2023-11-14T22:13:22.000Z",
       capturedAt: "2026-05-19T00:00:00.000Z"
     });
