@@ -14,7 +14,9 @@ import {
   type ImageUrlRecord
 } from "../shared/image-url-store";
 import { createZipArchive, type ZipFileEntry } from "../shared/zip";
-import { messages } from "./messages";
+import { getMessages, type MessageCatalog } from "./messages";
+
+type IconName = "refresh" | "save" | "copy" | "export" | "import" | "trash";
 
 type PageImageCandidate = {
   imageId: string;
@@ -40,6 +42,11 @@ type LoadedConversationMetadata = {
   items: ImageMetadata[];
   statusPrefix: string;
 };
+
+const { locale, messages } = getMessages();
+
+document.documentElement.lang = locale;
+applyStaticMessages(messages);
 
 const AUTO_PAGE_IMAGE_SCAN_ATTEMPTS = 5;
 const AUTO_PAGE_IMAGE_SCAN_DELAY_MS = 400;
@@ -103,6 +110,108 @@ function queryRequired<T extends Element>(selector: string): T {
 
   return element;
 }
+
+function applyStaticMessages(catalog: MessageCatalog): void {
+  document.title = catalog.ui.appTitle;
+
+  for (const element of document.querySelectorAll<HTMLElement>("[data-i18n]")) {
+    const value = resolveMessagePath(catalog, element.dataset.i18n);
+    if (value !== undefined) {
+      element.textContent = value;
+    }
+  }
+
+  for (const element of document.querySelectorAll<HTMLElement>("[data-i18n-aria-label]")) {
+    const value = resolveMessagePath(catalog, element.dataset.i18nAriaLabel);
+    if (value !== undefined) {
+      element.setAttribute("aria-label", value);
+    }
+  }
+
+  for (const element of document.querySelectorAll<HTMLElement>("[data-i18n-title]")) {
+    const value = resolveMessagePath(catalog, element.dataset.i18nTitle);
+    if (value !== undefined) {
+      element.setAttribute("title", value);
+    }
+  }
+
+  for (const element of document.querySelectorAll<HTMLElement>("[data-i18n-alt]")) {
+    const value = resolveMessagePath(catalog, element.dataset.i18nAlt);
+    if (value !== undefined) {
+      element.setAttribute("alt", value);
+    }
+  }
+}
+
+function resolveMessagePath(catalog: MessageCatalog, path: string | undefined): string | undefined {
+  if (!path) {
+    return undefined;
+  }
+
+  let value: unknown = catalog;
+  for (const part of path.split(".")) {
+    if (!value || typeof value !== "object" || !(part in value)) {
+      return undefined;
+    }
+    value = (value as Record<string, unknown>)[part];
+  }
+
+  return typeof value === "string" ? value : undefined;
+}
+
+function applyButtonIcons(): void {
+  decorateButton(refreshButton, "refresh");
+  decorateButton(downloadSelectedButton, "save");
+  decorateButton(exportJsonButton, "export");
+  decorateButton(exportDictionaryButton, "export");
+  decorateButton(importDictionaryButton, "import");
+  decorateButton(clearDictionaryButton, "trash");
+  decorateButton(confirmClearDictionaryButton(), "trash");
+  decorateButton(confirmDownloadZipButton(), "save");
+  decorateButton(viewerDownloadButton, "save");
+  decorateButton(viewerCopyImageButton, "copy");
+  decorateButton(viewerCopyUserInputButton, "copy");
+  decorateButton(viewerCopyCaptionButton, "copy");
+  decorateButton(viewerCopyPromptButton, "copy");
+}
+
+function confirmClearDictionaryButton(): HTMLButtonElement {
+  return queryRequired<HTMLButtonElement>("#confirm-clear-dictionary");
+}
+
+function confirmDownloadZipButton(): HTMLButtonElement {
+  return queryRequired<HTMLButtonElement>("#confirm-download-all");
+}
+
+function decorateButton(button: HTMLButtonElement, icon: IconName): void {
+  if (button.querySelector(".button-icon")) {
+    return;
+  }
+
+  button.classList.add("has-icon");
+  button.prepend(createIcon(icon));
+}
+
+function createIcon(icon: IconName): HTMLSpanElement {
+  const span = document.createElement("span");
+  span.className = "button-icon";
+  span.setAttribute("aria-hidden", "true");
+  span.innerHTML = iconSvg[icon];
+  return span;
+}
+
+const iconSvg: Record<IconName, string> = {
+  refresh:
+    '<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v6h-6"/></svg>',
+  save: '<svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>',
+  copy: '<svg viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"/></svg>',
+  export: '<svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg>',
+  import: '<svg viewBox="0 0 24 24"><path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M5 3h14"/></svg>',
+  trash:
+    '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>'
+};
+
+applyButtonIcons();
 
 function setStatus(message: string): void {
   statusEl.textContent = message;
@@ -397,7 +506,7 @@ function formatLoadedStatus(
 async function getActiveTab(): Promise<chrome.tabs.Tab> {
   const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (!tab) {
-    throw new Error("アクティブなタブが見つかりません");
+    throw new Error(messages.errors.activeTabMissing);
   }
 
   return tab;
@@ -592,17 +701,17 @@ function renderThumbnail(item: ImageMetadata): HTMLElement {
   const imageUrl = previewUrl ?? item.imageUrl;
 
   if (!imageUrl) {
-    return renderThumbnailPlaceholder("画像未取得");
+    return renderThumbnailPlaceholder(messages.labels.imageMissing);
   }
 
   const wrapper = document.createElement("button");
   wrapper.className = "thumb";
   wrapper.type = "button";
-  wrapper.setAttribute("aria-label", `${item.imageId ?? item.messageId ?? "画像"} をビューアで開く`);
+  wrapper.setAttribute("aria-label", messages.labels.openViewer(item.imageId ?? item.messageId ?? messages.labels.image));
   wrapper.addEventListener("click", () => openViewerForItem(item));
 
   const image = document.createElement("img");
-  image.alt = item.caption ?? item.imageId ?? "ChatGPT生成画像";
+  image.alt = item.caption ?? item.imageId ?? messages.labels.generatedImageAlt;
   image.loading = "lazy";
   image.src = imageUrl;
   image.addEventListener("error", () => {
@@ -637,12 +746,12 @@ function renderImageMain(item: ImageMetadata): HTMLElement {
     setItemSelected(item, selectBox.checked);
   });
   const selectText = document.createElement("span");
-  selectText.textContent = "選択";
+  selectText.textContent = messages.ui.selectImage;
   selectLabel.append(selectBox, selectText);
 
   const imageId = document.createElement("div");
   imageId.className = "image-id";
-  imageId.textContent = item.imageId ?? item.messageId ?? "画像";
+  imageId.textContent = item.imageId ?? item.messageId ?? messages.labels.image;
 
   const time = document.createElement("time");
   time.className = "image-time";
@@ -654,18 +763,22 @@ function renderImageMain(item: ImageMetadata): HTMLElement {
   if (item.imageRole === "user_attachment") {
     const role = document.createElement("p");
     role.className = "image-text image-role-text";
-    role.textContent = "添付画像";
+    role.textContent = messages.labels.userAttachment;
     main.append(role);
   }
 
   if (item.userInput) {
     const text = document.createElement("p");
     text.className = "image-text";
-    text.textContent = `ユーザー入力: ${item.userInput}`;
+    text.textContent = messages.labels.fieldLine(messages.labels.userInput, item.userInput);
     main.append(text);
   }
 
-  const primaryText = item.caption ? `キャプション: ${item.caption}` : item.prompt ? `生成プロンプト: ${item.prompt}` : undefined;
+  const primaryText = item.caption
+    ? messages.labels.fieldLine(messages.labels.caption, item.caption)
+    : item.prompt
+      ? messages.labels.fieldLine(messages.labels.prompt, item.prompt)
+      : undefined;
   if (primaryText) {
     const text = document.createElement("p");
     text.className = "image-text";
@@ -677,8 +790,9 @@ function renderImageMain(item: ImageMetadata): HTMLElement {
   actions.className = "card-actions";
   const downloadButton = document.createElement("button");
   downloadButton.type = "button";
-  downloadButton.textContent = "保存";
+  downloadButton.textContent = messages.ui.buttons.save;
   downloadButton.disabled = !item.imageUrl;
+  decorateButton(downloadButton, "save");
   downloadButton.addEventListener("click", () => {
     void downloadSingleImage(item).catch((error: unknown) => {
       setStatus(messages.status.imageSaveFailed);
@@ -708,8 +822,8 @@ function updateSelectionControls(isBusy: boolean): void {
   const downloadableItems = getDownloadableItems();
   const selectedItems = getSelectedDownloadableItems();
   const allSelected = areAllDownloadableItemsSelected();
-  selectionSummaryEl.textContent = `${selectedItems.length} / ${downloadableItems.length}件選択`;
-  selectionToggleButton.textContent = allSelected ? "全選択解除" : "全選択";
+  selectionSummaryEl.textContent = messages.ui.selectionSummary(selectedItems.length, downloadableItems.length);
+  selectionToggleButton.textContent = allSelected ? messages.ui.buttons.clearSelection : messages.ui.buttons.selectAll;
   selectionToggleButton.disabled = isBusy || downloadableItems.length === 0;
   downloadSelectedButton.disabled = isBusy || selectedItems.length === 0;
 }
@@ -807,7 +921,7 @@ function renderViewer(): void {
   const prompt = item.prompt ?? "";
 
   viewerPositionEl.textContent = `${viewerIndex + 1} / ${viewerItems.length}`;
-  viewerImageIdEl.textContent = item.imageId ?? item.messageId ?? "画像";
+  viewerImageIdEl.textContent = item.imageId ?? item.messageId ?? messages.labels.image;
   viewerCreatedAtEl.textContent = item.createdAt ? formatDisplayDate(item.createdAt) : "";
   viewerCreatedAtEl.dateTime = item.createdAt ?? "";
   viewerUserInputEl.textContent = userInput || messages.viewer.userInputMissing;
@@ -821,7 +935,7 @@ function renderViewer(): void {
   viewerImage.hidden = false;
   viewerImageStatus.hidden = true;
   viewerImageStatus.textContent = "";
-  viewerImage.alt = caption || item.imageId || "ChatGPT生成画像";
+  viewerImage.alt = caption || item.imageId || messages.labels.generatedImageAlt;
   viewerImage.src = imageUrl;
 }
 
@@ -1087,7 +1201,7 @@ async function downloadImagesAsZip(sourceItems: ImageMetadata[]): Promise<void> 
     const downloadedImages = items.length - failed;
     const parts = [messages.status.zipSaved(downloadedImages, items.length)];
     if (sidecars > 0) {
-      parts.push(`JSON同梱 ${sidecars}件`);
+      parts.push(messages.labels.fieldLine(messages.labels.jsonIncluded, String(sidecars)));
     }
     if (failed > 0) {
       parts.push(messages.status.zipFailed(failed));
@@ -1096,7 +1210,7 @@ async function downloadImagesAsZip(sourceItems: ImageMetadata[]): Promise<void> 
       parts.push(messages.status.zipSkippedMissing(skipped));
     }
     updateDownloadProgress(messages.progress.downloadStarted, items.length, items.length);
-    setStatus(parts.join("、"));
+    setStatus(parts.join(locale === "ja" ? "、" : ", "));
   } finally {
     setBusy(false);
   }
@@ -1408,7 +1522,7 @@ function wireAutoRefreshEvents(): void {
 }
 
 function formatDisplayDate(iso: string): string {
-  return new Date(iso).toLocaleString("ja-JP", {
+  return new Date(iso).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", {
     month: "short",
     day: "numeric",
     hour: "2-digit",

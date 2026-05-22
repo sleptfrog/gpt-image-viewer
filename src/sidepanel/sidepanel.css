@@ -38,6 +38,33 @@ button:disabled {
   opacity: 0.48;
 }
 
+.has-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.button-icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  place-items: center;
+  pointer-events: none;
+}
+
+.button-icon svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
 #app {
   display: flex;
   min-height: 100vh;
@@ -256,6 +283,7 @@ h1 {
 .toolbar-menu-panel button {
   flex: none;
   width: 100%;
+  justify-content: flex-start;
   text-align: left;
   user-select: none;
 }
