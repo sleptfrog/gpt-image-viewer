@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GPT Image Viewer",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Capture and review ChatGPT image metadata locally.",
   "action": {
     "default_icon": {
