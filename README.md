@@ -126,6 +126,7 @@ Development requires Node.js and npm. `npm run build` generates the unpacked ext
 npm install
 npm test
 npm run build
+npm run release-check
 ```
 
 リリース用パッケージは `npm run package` で `release/` に生成されます。ZIPの直下に `manifest.json` が入る形式で作成され、sourcemapは含めません。
@@ -151,6 +152,10 @@ npm run typecheck
 npx tsc --noEmit --noUnusedLocals --noUnusedParameters
 npm audit --audit-level=moderate
 ```
+
+`npm run release-check` は、テスト、ビルド、パッケージ作成、ZIP内容検査などのリリース前チェックをまとめて実行します。作業ツリーがcleanであることを要求します。
+
+`npm run release-check` runs release-time checks, including tests, build, packaging, and ZIP content inspection. It requires a clean working tree.
 
 ## リポジトリ構成 / Repository Structure
 

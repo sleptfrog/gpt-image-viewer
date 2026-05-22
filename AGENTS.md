@@ -59,6 +59,7 @@ npm test
 npm run build
 npm run package
 npm run typecheck
+npm run release-check
 ```
 
 追加で公開前チェックをする場合:
@@ -68,6 +69,8 @@ npx tsc --noEmit --noUnusedLocals --noUnusedParameters
 npm audit --audit-level=moderate
 git diff --check
 ```
+
+`npm run release-check` は、リリース前の機械的チェックです。作業ツリーclean、version一致、test/build/package、ZIP内容検査を行います。スクリプト開発中など、未コミット差分を許容して動作確認する場合だけ `node scripts/release-check.mjs --allow-dirty` を使ってください。
 
 通常ビルドではsourcemapを生成しません。拡張機能のデバッグでsourcemapが必要な場合だけ `npm run build:debug` を使ってください。
 
