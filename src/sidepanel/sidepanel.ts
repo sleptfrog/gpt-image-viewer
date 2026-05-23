@@ -6,15 +6,17 @@ import { classifyChatGptPageUrl } from "../shared/chatgpt-url";
 import {
   clearImageUrlRecords,
   createImageUrlRecordsExport,
+  getImageUrlRecordStats,
   IMAGE_URL_RECORDS_KEY,
   importImageUrlRecords,
   loadImageUrlRecords,
   mergeImageUrlRecord,
   saveImageUrlRecords,
-  type ImageUrlRecord
+  type ImageUrlRecord,
+  type ImageUrlRecordStats
 } from "../shared/image-url-store";
 import { createZipArchive, type ZipFileEntry } from "../shared/zip";
-import { getMessages, type MessageCatalog } from "./messages";
+import { getMessages, type LoadedStatusInput, type MessageCatalog } from "./messages";
 
 type IconName = "refresh" | "save" | "copy" | "export" | "import" | "trash";
 
@@ -41,6 +43,7 @@ type PageImageScanOptions = {
 type LoadedConversationMetadata = {
   items: ImageMetadata[];
   statusPrefix: string;
+  conversationTitle?: string;
 };
 
 const { locale, messages } = getMessages();
@@ -53,9 +56,15 @@ const AUTO_PAGE_IMAGE_SCAN_DELAY_MS = 400;
 
 const statusEl = queryRequired<HTMLParagraphElement>("#status");
 const countEl = queryRequired<HTMLSpanElement>("#item-count");
+const conversationDetailsEl = queryRequired<HTMLDetailsElement>("#conversation-details");
+const conversationTitleEl = queryRequired<HTMLSpanElement>("#conversation-title");
 const conversationIdEl = queryRequired<HTMLSpanElement>("#conversation-id");
 const contentEl = queryRequired<HTMLElement>("#content");
 const refreshButton = queryRequired<HTMLButtonElement>("#refresh");
+const activityStatusEl = queryRequired<HTMLElement>("#activity-status");
+const dataDetailsEl = queryRequired<HTMLDetailsElement>("#data-details");
+const chatDataSummaryEl = queryRequired<HTMLElement>("#chat-data-summary");
+const imageImportSummaryEl = queryRequired<HTMLElement>("#image-import-summary");
 const showAttachmentsToggle = queryRequired<HTMLInputElement>("#show-attachments");
 const selectionSummaryEl = queryRequired<HTMLSpanElement>("#selection-summary");
 const selectionToggleButton = queryRequired<HTMLButtonElement>("#selection-toggle");
@@ -95,6 +104,7 @@ const viewerCopyPromptButton = queryRequired<HTMLButtonElement>("#viewer-copy-pr
 
 let currentItems: ImageMetadata[] = [];
 let currentPreviewUrls = new Map<string, string>();
+let currentChatDataSummary: LoadedStatusInput | undefined;
 let selectedItemKeys = new Set<string>();
 let showUserAttachments = false;
 let loadSequence = 0;
@@ -217,6 +227,59 @@ function setStatus(message: string): void {
   statusEl.textContent = message;
 }
 
+function setActivityStatus(message?: string): void {
+  activityStatusEl.hidden = !message;
+  activityStatusEl.textContent = message ?? "";
+}
+
+function resetDataDetails(): void {
+  currentChatDataSummary = undefined;
+  dataDetailsEl.hidden = false;
+  chatDataSummaryEl.textContent = messages.ui.notAvailable;
+  imageImportSummaryEl.textContent = messages.ui.notAvailable;
+}
+
+function showDataDetails(): void {
+  dataDetailsEl.hidden = false;
+}
+
+function setChatDataSummary(input?: LoadedStatusInput): void {
+  currentChatDataSummary = input;
+  showDataDetails();
+  chatDataSummaryEl.textContent = input ? messages.ui.chatDataSummary(input) : messages.ui.notAvailable;
+}
+
+function updateChatDataSummaryForVisibleItems(): void {
+  if (!currentChatDataSummary) {
+    return;
+  }
+
+  setChatDataSummary({
+    ...currentChatDataSummary,
+    itemCount: getVisibleItems().length,
+    hiddenAttachmentCount: countHiddenUserAttachments(currentItems),
+    showUserAttachments
+  });
+}
+
+function setImageImportSummary(stats?: ImageUrlRecordStats): void {
+  showDataDetails();
+  imageImportSummaryEl.textContent = stats
+    ? messages.ui.imageImportSummary({
+        totalRecordCount: stats.totalRecordCount,
+        recentImageGenRecordCount: stats.recentImageGenRecordCount,
+        recentImageGenLinkedConversationCount: stats.recentImageGenLinkedConversationCount,
+        latestCapturedLabel: stats.latestRecentImageGenCapturedAt ? formatDisplayDate(stats.latestRecentImageGenCapturedAt) : undefined
+      })
+    : messages.ui.notAvailable;
+}
+
+function setConversationInfo(conversationId?: string, conversationTitle?: string): void {
+  conversationDetailsEl.hidden = false;
+  conversationTitleEl.textContent = conversationTitle || messages.ui.noChatSelected;
+  conversationIdEl.textContent = conversationId || "-";
+}
+
 function hideDownloadProgress(): void {
   downloadProgress.hidden = true;
   downloadProgressLabel.textContent = "";
@@ -242,8 +305,11 @@ async function loadCurrentConversation(options: LoadOptions = {}): Promise<void>
   hideDownloadProgress();
   currentItems = [];
   currentPreviewUrls = new Map();
+  currentChatDataSummary = undefined;
   selectedItemKeys = new Set();
-  conversationIdEl.textContent = "-";
+  setConversationInfo();
+  resetDataDetails();
+  setActivityStatus();
   setStatus(options.status ?? messages.status.loadingCurrentChat);
   renderEmptyContent(messages.empty.loading);
 
@@ -265,17 +331,30 @@ async function loadCurrentConversation(options: LoadOptions = {}): Promise<void>
       return;
     }
 
+    const imageUrlRecords = await loadImageUrlRecords().catch((error: unknown) => {
+      console.warn("Failed to load image URL records", error);
+      return new Map<string, ImageUrlRecord>();
+    });
+
+    if (sequence !== loadSequence) {
+      return;
+    }
+
+    setImageImportSummary(getImageUrlRecordStats(imageUrlRecords.values()));
+
     if (pageContext.kind === "images") {
       resetCurrentView(messages.status.chatGptImagesPage, messages.empty.chatGptImagesPage);
+      setImageImportSummary(getImageUrlRecordStats(imageUrlRecords.values()));
       return;
     }
 
     if (pageContext.kind === "chatgpt") {
       resetCurrentView(messages.status.chatGptNonChatPage, messages.empty.chatGptNonChatPage);
+      setImageImportSummary(getImageUrlRecordStats(imageUrlRecords.values()));
       return;
     }
 
-    conversationIdEl.textContent = pageContext.conversationId;
+    setConversationInfo(pageContext.conversationId);
 
     const capturedAt = new Date().toISOString();
     const pageImages = shouldCollectPageImages
@@ -287,16 +366,13 @@ async function loadCurrentConversation(options: LoadOptions = {}): Promise<void>
           return [];
         })
       : [];
-    const imageUrlRecords = await loadImageUrlRecords().catch((error: unknown) => {
-      console.warn("Failed to load image URL records", error);
-      return new Map<string, ImageUrlRecord>();
-    });
     const pageRecords = pageImages.map((image) => pageImageToUrlRecord(image, capturedAt));
     mergeImageUrlRecords(imageUrlRecords, pageRecords);
     if (shouldCollectPageImages) {
       await saveImageUrlRecords(pageRecords).catch((error: unknown) => {
         console.warn("Failed to save page image URL records", error);
       });
+      setImageImportSummary(getImageUrlRecordStats(imageUrlRecords.values()));
     }
 
     if (sequence !== loadSequence) {
@@ -307,23 +383,29 @@ async function loadCurrentConversation(options: LoadOptions = {}): Promise<void>
     const loaded = await loadConversationMetadata(pageContext.conversationId, imageUrls);
     if (!loaded) {
       resetCurrentView(messages.status.chatDataNotCaptured, messages.empty.chatDataNotCaptured);
-      conversationIdEl.textContent = pageContext.conversationId;
+      setConversationInfo(pageContext.conversationId);
+      setImageImportSummary(getImageUrlRecordStats(imageUrlRecords.values()));
       return;
     }
 
+    setConversationInfo(pageContext.conversationId, loaded.conversationTitle);
     currentItems = sortItems(applyImageUrlRecords(loaded.items, imageUrlRecords).map(stripRawMetadata));
     currentPreviewUrls = previewUrlMapFromRecords(imageUrlRecords);
     imageUrls = imageUrlMapFromRecords(imageUrlRecords);
 
     if (currentItems.length === 0) {
       setStatus(messages.status.noImagesInConversation);
+      setChatDataSummary(
+        createChatDataSummaryInput(loaded.statusPrefix, 0, pageImages.length, 0, imageUrlRecords.size, 0, countHiddenUserAttachments(currentItems))
+      );
       renderEmptyContent(messages.empty.noImagesInConversation);
       return;
     }
 
     const visibleItems = getVisibleItems();
-    setStatus(
-      formatLoadedStatus(
+    setStatus(messages.status.chatLoaded);
+    setChatDataSummary(
+      createChatDataSummaryInput(
         loaded.statusPrefix,
         visibleItems.length,
         pageImages.length,
@@ -337,8 +419,10 @@ async function loadCurrentConversation(options: LoadOptions = {}): Promise<void>
   } catch (error) {
     currentItems = [];
     currentPreviewUrls = new Map();
+    currentChatDataSummary = undefined;
     selectedItemKeys = new Set();
-    conversationIdEl.textContent = "-";
+    setConversationInfo();
+    resetDataDetails();
     setStatus(messages.status.loadFailed);
     renderError(error instanceof Error ? localizeErrorMessage(error.message) : messages.errors.unknown);
   } finally {
@@ -371,7 +455,8 @@ async function loadConversationMetadata(
   if (snapshot) {
     return {
       items: applyImageUrls(stripImageUrls(snapshot.items), imageUrls),
-      statusPrefix: messages.status.loadedPrefix
+      statusPrefix: messages.status.loadedPrefix,
+      conversationTitle: snapshot.conversationTitle
     };
   }
 
@@ -417,7 +502,7 @@ function applyImageUrlRecords(
       messageId: item.messageId ?? record.messageId,
       imageUrl: item.imageUrl ?? record.imageUrl,
       prompt: item.prompt ?? record.prompt,
-      caption: item.caption ?? record.title,
+      caption: item.caption ?? record.caption ?? record.title,
       createdAt: item.createdAt ?? record.createdAt
     };
   });
@@ -482,7 +567,7 @@ function countItemsWithUrlRecords(
   return items.filter((item) => item.imageId && records.has(item.imageId)).length;
 }
 
-function formatLoadedStatus(
+function createChatDataSummaryInput(
   statusPrefix: string,
   itemCount: number,
   pageUrlCount: number,
@@ -490,8 +575,8 @@ function formatLoadedStatus(
   storedUrlRecordCount: number,
   missingUrlCount: number,
   hiddenAttachmentCount: number
-): string {
-  return messages.status.loaded({
+): LoadedStatusInput {
+  return {
     statusPrefix,
     itemCount,
     pageUrlCount,
@@ -500,7 +585,7 @@ function formatLoadedStatus(
     missingUrlCount,
     hiddenAttachmentCount,
     showUserAttachments
-  });
+  };
 }
 
 async function getActiveTab(): Promise<chrome.tabs.Tab> {
@@ -617,8 +702,10 @@ function setBusy(isBusy: boolean): void {
 function resetCurrentView(statusMessage: string, emptyMessage: string): void {
   currentItems = [];
   currentPreviewUrls = new Map();
+  currentChatDataSummary = undefined;
   selectedItemKeys = new Set();
-  conversationIdEl.textContent = "-";
+  setConversationInfo();
+  resetDataDetails();
   setStatus(statusMessage);
   renderEmptyContent(emptyMessage);
   closeViewer();
@@ -795,7 +882,7 @@ function renderImageMain(item: ImageMetadata): HTMLElement {
   decorateButton(downloadButton, "save");
   downloadButton.addEventListener("click", () => {
     void downloadSingleImage(item).catch((error: unknown) => {
-      setStatus(messages.status.imageSaveFailed);
+      setActivityStatus(messages.status.imageSaveFailed);
       console.warn("Failed to download image", error);
     });
   });
@@ -841,27 +928,26 @@ function setItemSelected(item: ImageMetadata, isSelected: boolean): void {
     selectedItemKeys.delete(key);
   }
   renderCurrentItems();
-  const selectedCount = getSelectedDownloadableItems().length;
-  setStatus(selectedCount > 0 ? messages.status.selected(selectedCount) : messages.status.selectionCleared);
+  // Selection state is shown in the selection summary row.
 }
 
 function toggleSelectAllDownloadableItems(): void {
   const downloadableItems = getDownloadableItems();
   if (downloadableItems.length === 0) {
-    setStatus(messages.status.noSelectableImages);
+    setActivityStatus(messages.status.noSelectableImages);
     return;
   }
 
   if (areAllDownloadableItemsSelected()) {
     selectedItemKeys = new Set();
     renderCurrentItems();
-    setStatus(messages.status.allSelectionCleared);
+    // Selection state is shown in the selection summary row.
     return;
   }
 
   selectedItemKeys = new Set(downloadableItems.map(imageItemKey));
   renderCurrentItems();
-  setStatus(messages.status.allSelected(downloadableItems.length));
+  // Selection state is shown in the selection summary row.
 }
 
 function getViewerItems(): ImageMetadata[] {
@@ -872,7 +958,7 @@ function openViewerForItem(item: ImageMetadata): void {
   const viewerItems = getViewerItems();
   const index = viewerItems.findIndex((candidate) => imageItemKey(candidate) === imageItemKey(item));
   if (index < 0) {
-    setStatus(messages.status.viewerNoImageUrl);
+    setActivityStatus(messages.status.viewerNoImageUrl);
     return;
   }
 
@@ -1010,9 +1096,9 @@ async function copyCurrentViewerImage(): Promise<void> {
     } catch {
       await writeImageBlobToClipboard(await convertImageBlobToPng(sourceBlob));
     }
-    setStatus(messages.status.imageCopied);
+    setActivityStatus(messages.status.imageCopied);
   } catch (error) {
-    setStatus(messages.status.imageCopyFailed);
+    setActivityStatus(messages.status.imageCopyFailed);
     console.warn("Failed to copy image", error);
   } finally {
     viewerCopyImageButton.disabled = !currentViewerItem()?.imageUrl;
@@ -1029,9 +1115,9 @@ async function copyViewerText(kind: "caption" | "prompt" | "userInput"): Promise
 
   try {
     await navigator.clipboard.writeText(value);
-    setStatus(messages.status.textCopied(label));
+    setActivityStatus(messages.status.textCopied(label));
   } catch (error) {
-    setStatus(messages.status.textCopyFailed(label));
+    setActivityStatus(messages.status.textCopyFailed(label));
     console.warn(`Failed to copy ${kind}`, error);
   }
 }
@@ -1109,18 +1195,18 @@ type PreparedImageDownload = {
 async function downloadSingleImage(item: ImageMetadata): Promise<void> {
   hideDownloadProgress();
   setBusy(true);
-  setStatus(messages.status.imageSaving);
+  setActivityStatus(messages.status.imageSaving);
 
   try {
     const prepared = await prepareImageDownload(item);
     if (!prepared) {
-      setStatus(messages.status.imageUrlMissing);
+      setActivityStatus(messages.status.imageUrlMissing);
     } else {
       await downloadPreparedImage(prepared);
       if (prepared.embedded) {
-        setStatus(messages.status.imageSavedEmbedded(prepared.imageFile.path));
+        setActivityStatus(messages.status.imageSavedEmbedded(prepared.imageFile.path));
       } else {
-        setStatus(messages.status.imageSavedWithJson(prepared.imageFile.path));
+        setActivityStatus(messages.status.imageSavedWithJson(prepared.imageFile.path));
       }
     }
   } finally {
@@ -1150,7 +1236,7 @@ async function downloadImagesAsZip(sourceItems: ImageMetadata[]): Promise<void> 
   const items = sourceItems.filter((item) => item.imageUrl);
   const skipped = sourceItems.length - items.length;
   if (items.length === 0) {
-    setStatus(messages.status.noSelectedImagesToSave);
+    setActivityStatus(messages.status.noSelectedImagesToSave);
     return;
   }
 
@@ -1166,7 +1252,7 @@ async function downloadImagesAsZip(sourceItems: ImageMetadata[]): Promise<void> 
   try {
     for (const [index, item] of items.entries()) {
       updateDownloadProgress(messages.progress.preparingImages, index, items.length);
-      setStatus(messages.status.zipPreparing(index + 1, items.length));
+      setActivityStatus(messages.status.zipPreparing(index + 1, items.length));
       try {
         const prepared = await prepareImageDownload(item);
         if (!prepared) {
@@ -1189,7 +1275,7 @@ async function downloadImagesAsZip(sourceItems: ImageMetadata[]): Promise<void> 
 
     if (files.length === 0) {
       updateDownloadProgress(messages.progress.noZipFiles, items.length, items.length);
-      setStatus(messages.status.noZipFiles);
+      setActivityStatus(messages.status.noZipFiles);
       return;
     }
 
@@ -1210,7 +1296,7 @@ async function downloadImagesAsZip(sourceItems: ImageMetadata[]): Promise<void> 
       parts.push(messages.status.zipSkippedMissing(skipped));
     }
     updateDownloadProgress(messages.progress.downloadStarted, items.length, items.length);
-    setStatus(parts.join(locale === "ja" ? "、" : ", "));
+    setActivityStatus(parts.join(locale === "ja" ? "、" : ", "));
   } finally {
     setBusy(false);
   }
@@ -1411,7 +1497,7 @@ function exportJson(): void {
   anchor.download = `chatgpt-image-metadata-${formatTimestampForFilename(payload.exportedAt)}.json`;
   anchor.click();
   URL.revokeObjectURL(url);
-  setStatus(messages.status.metadataExported(items.length));
+  setActivityStatus(messages.status.metadataExported(items.length));
 }
 
 async function exportDictionary(): Promise<void> {
@@ -1425,13 +1511,13 @@ async function exportDictionary(): Promise<void> {
   anchor.download = `gpt-image-viewer-url-dictionary-${formatTimestampForFilename(payload.exportedAt)}.json`;
   anchor.click();
   URL.revokeObjectURL(url);
-  setStatus(messages.status.dictionaryExported(payload.records.length));
+  setActivityStatus(messages.status.dictionaryExported(payload.records.length));
 }
 
 async function importDictionaryFromFile(file: File): Promise<void> {
   const payload = JSON.parse(await file.text()) as unknown;
   const importedCount = await importImageUrlRecords(payload);
-  setStatus(messages.status.dictionaryImported(importedCount));
+  setActivityStatus(messages.status.dictionaryImported(importedCount));
   scheduleLoadCurrentConversation({ collectPageImages: false });
 }
 
@@ -1441,8 +1527,8 @@ async function clearDictionary(): Promise<void> {
   }
 
   await clearImageUrlRecords();
-  setStatus(messages.status.dictionaryCleared);
-  scheduleLoadCurrentConversation({ collectPageImages: false, status: messages.status.dictionaryReloading });
+  setActivityStatus(messages.status.dictionaryCleared);
+  scheduleLoadCurrentConversation({ collectPageImages: false });
 }
 
 function confirmClearDictionary(): Promise<boolean> {
@@ -1543,13 +1629,14 @@ refreshButton.addEventListener("click", () => {
 showAttachmentsToggle.addEventListener("change", () => {
   showUserAttachments = showAttachmentsToggle.checked;
   renderCurrentItems();
+  updateChatDataSummaryForVisibleItems();
   const hiddenCount = countHiddenUserAttachments(currentItems);
-  setStatus(showUserAttachments ? messages.status.attachmentsShown : messages.status.attachmentsHidden(hiddenCount));
+  setActivityStatus(showUserAttachments ? messages.status.attachmentsShown : messages.status.attachmentsHidden(hiddenCount));
 });
 selectionToggleButton.addEventListener("click", toggleSelectAllDownloadableItems);
 downloadSelectedButton.addEventListener("click", () => {
   void downloadSelectedImages().catch((error: unknown) => {
-    setStatus(messages.status.selectedImageSaveFailed);
+    setActivityStatus(messages.status.selectedImageSaveFailed);
     console.warn("Failed to download selected images", error);
   });
 });
@@ -1579,7 +1666,7 @@ viewerPrevEdgeButton.addEventListener("click", () => moveViewer(-1));
 viewerNextEdgeButton.addEventListener("click", () => moveViewer(1));
 viewerDownloadButton.addEventListener("click", () => {
   void downloadCurrentViewerImage().catch((error: unknown) => {
-    setStatus(messages.status.imageSaveFailed);
+    setActivityStatus(messages.status.imageSaveFailed);
     console.warn("Failed to download viewer image", error);
   });
 });
@@ -1599,7 +1686,7 @@ exportJsonButton.addEventListener("click", exportJson);
 exportDictionaryButton.addEventListener("click", () => {
   moreActionsMenu.open = false;
   void exportDictionary().catch((error: unknown) => {
-    setStatus(messages.status.dictionaryExportFailed);
+    setActivityStatus(messages.status.dictionaryExportFailed);
     renderError(error instanceof Error ? localizeErrorMessage(error.message) : messages.errors.unknown);
   });
 });
@@ -1610,7 +1697,7 @@ importDictionaryButton.addEventListener("click", () => {
 clearDictionaryButton.addEventListener("click", () => {
   moreActionsMenu.open = false;
   void clearDictionary().catch((error: unknown) => {
-    setStatus(messages.status.dictionaryClearFailed);
+    setActivityStatus(messages.status.dictionaryClearFailed);
     renderError(error instanceof Error ? localizeErrorMessage(error.message) : messages.errors.unknown);
   });
 });
@@ -1622,7 +1709,7 @@ dictionaryFileInput.addEventListener("change", () => {
   }
 
   void importDictionaryFromFile(file).catch((error: unknown) => {
-    setStatus(messages.status.dictionaryImportFailed);
+    setActivityStatus(messages.status.dictionaryImportFailed);
     renderError(error instanceof Error ? localizeErrorMessage(error.message) : messages.errors.unknown);
   });
 });

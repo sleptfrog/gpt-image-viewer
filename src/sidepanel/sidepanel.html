@@ -19,6 +19,31 @@
         </div>
       </header>
 
+      <details id="conversation-details" class="conversation">
+        <summary>
+          <span class="conversation-label" data-i18n="ui.chat">Chat</span>
+          <span id="conversation-title" class="conversation-title">-</span>
+        </summary>
+        <div class="conversation-body">
+          <span class="conversation-id-label" data-i18n="ui.chatId">ID</span>
+          <span id="conversation-id" class="conversation-id">-</span>
+        </div>
+      </details>
+
+      <details id="data-details" class="data-details">
+        <summary data-i18n="ui.dataDetails">Data details</summary>
+        <dl class="data-details-grid">
+          <div>
+            <dt data-i18n="ui.currentChatData">Current chat data</dt>
+            <dd id="chat-data-summary">-</dd>
+          </div>
+          <div>
+            <dt data-i18n="ui.imagePageImportData">Images page import</dt>
+            <dd id="image-import-summary">-</dd>
+          </div>
+        </dl>
+      </details>
+
       <section class="toolbar" aria-label="Actions" data-i18n-aria-label="ui.operations">
         <div class="toolbar-group toolbar-global" aria-label="Global actions" data-i18n-aria-label="ui.globalActions">
           <button id="refresh" class="toolbar-button" type="button" data-i18n="ui.buttons.refresh">Refresh</button>
@@ -41,6 +66,8 @@
           </label>
         </div>
 
+        <section id="activity-status" class="activity-status" aria-live="polite" hidden></section>
+
         <div class="toolbar-group toolbar-selection" aria-label="Selection actions" data-i18n-aria-label="ui.selectionActions">
           <span id="selection-summary" class="selection-summary" aria-live="polite">0 / 0 selected</span>
           <button id="selection-toggle" class="toolbar-button" type="button" disabled data-i18n="ui.buttons.selectAll">Select all</button>
@@ -55,11 +82,6 @@
           <span id="download-progress-count"></span>
         </div>
         <progress id="download-progress-bar" value="0" max="1"></progress>
-      </section>
-
-      <section class="conversation">
-        <span class="conversation-label" data-i18n="ui.chat">Chat</span>
-        <span id="conversation-id" class="conversation-id">-</span>
       </section>
 
       <section id="content" class="content" aria-label="Image list" data-i18n-aria-label="ui.contentList"></section>

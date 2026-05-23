@@ -11,6 +11,13 @@ export type LoadedStatusInput = {
   showUserAttachments: boolean;
 };
 
+export type ImageImportSummaryInput = {
+  totalRecordCount: number;
+  recentImageGenRecordCount: number;
+  recentImageGenLinkedConversationCount: number;
+  latestCapturedLabel?: string;
+};
+
 export type MessageCatalog = {
   status: {
     loadingCurrentChat: string;
@@ -20,6 +27,7 @@ export type MessageCatalog = {
     chatDataNotCaptured: string;
     noImagesInConversation: string;
     loadFailed: string;
+    chatLoaded: string;
     loadedPrefix: string;
     loaded: (input: LoadedStatusInput) => string;
     selected: (count: number) => string;
@@ -119,6 +127,7 @@ export type MessageCatalog = {
     selectionActions: string;
     contentList: string;
     chat: string;
+    chatId: string;
     preparing: string;
     selectImage: string;
     buttons: {
@@ -138,7 +147,15 @@ export type MessageCatalog = {
       copyImage: string;
     };
     attachments: string;
+    dataDetails: string;
+    currentChatData: string;
+    imagePageImportData: string;
+    notAvailable: string;
+    untitledChat: string;
+    noChatSelected: string;
     selectionSummary: (selected: number, total: number) => string;
+    chatDataSummary: (input: LoadedStatusInput) => string;
+    imageImportSummary: (input: ImageImportSummaryInput) => string;
     clearDictionaryTitle: string;
     clearDictionaryBody: string;
     downloadZipTitle: string;
@@ -158,13 +175,13 @@ export type MessageCatalog = {
 const jaMessages: MessageCatalog = {
   status: {
     loadingCurrentChat: "現在のチャットを読み込み中",
-    outsideChatGpt: "ChatGPTのチャットページを開くと画像一覧を表示できます",
-    chatGptNonChatPage: "このページでは画像一覧を表示しません。ChatGPTのチャットページを開いてください",
-    chatGptImagesPage: "画像ページで読み込まれた画像URLは辞書に取り込まれます。画像一覧はチャットページで表示します",
-    chatDataNotCaptured:
-      "このチャットのデータはまだ取得されていません。ChatGPTタブを再読み込みしてからサイドパネルを更新してください",
-    noImagesInConversation: "このチャットに保存対象の画像は見つかりませんでした",
+    outsideChatGpt: "ChatGPT以外のページです",
+    chatGptNonChatPage: "ChatGPTの非チャットページです",
+    chatGptImagesPage: "画像ページを表示中",
+    chatDataNotCaptured: "チャットデータ未取得です",
+    noImagesInConversation: "画像なしのチャットです",
     loadFailed: "チャットの読み込みに失敗しました",
+    chatLoaded: "このチャットの画像一覧を表示しています",
     loadedPrefix: "取得済みデータを読み込み",
     loaded: (input) => {
       const parts = [
@@ -221,8 +238,7 @@ const jaMessages: MessageCatalog = {
     outsideChatGpt: "ChatGPTのチャットページを開くと画像一覧を表示できます",
     chatGptNonChatPage: "このページでは画像一覧を表示しません。ChatGPTのチャットページを開いてください",
     chatGptImagesPage: "画像ページで読み込まれた画像URLは辞書に取り込まれます。画像一覧はチャットページで表示します",
-    chatDataNotCaptured:
-      "このチャットのデータはまだ取得されていません。ChatGPTタブを再読み込みしてからサイドパネルを更新してください",
+    chatDataNotCaptured: "チャットデータ未取得です",
     noImagesInConversation: "このチャットに保存対象の画像は見つかりませんでした",
     noMetadata: "画像メタデータはまだ見つかっていません",
     hiddenAttachments: (count) => `添付画像 ${count}件は非表示です。「添付画像」をオンにすると表示できます。`
@@ -282,6 +298,7 @@ const jaMessages: MessageCatalog = {
     selectionActions: "選択操作",
     contentList: "画像一覧",
     chat: "チャット",
+    chatId: "ID",
     preparing: "準備中",
     selectImage: "選択",
     buttons: {
@@ -301,7 +318,25 @@ const jaMessages: MessageCatalog = {
       copyImage: "画像をコピー"
     },
     attachments: "添付画像",
+    dataDetails: "詳細データ",
+    currentChatData: "現在のチャット",
+    imagePageImportData: "画像ページ取り込み",
+    notAvailable: "-",
+    untitledChat: "タイトル未取得",
+    noChatSelected: "チャット未選択",
     selectionSummary: (selected, total) => `${selected} / ${total}件選択`,
+    chatDataSummary: (input) => jaMessages.status.loaded(input),
+    imageImportSummary: (input) => {
+      const parts = [
+        `画像ページ取り込み ${input.recentImageGenRecordCount}件`,
+        `チャット紐づき ${input.recentImageGenLinkedConversationCount}件`,
+        `辞書合計 ${input.totalRecordCount}件`
+      ];
+      if (input.latestCapturedLabel) {
+        parts.push(`最終 ${input.latestCapturedLabel}`);
+      }
+      return parts.join(" / ");
+    },
     clearDictionaryTitle: "辞書を全削除しますか？",
     clearDictionaryBody:
       "このブラウザセッションに保存された画像URL辞書を削除します。チャットのメタデータは残りますが、辞書にしかURLがない画像は画像未取得の表示になります。",
@@ -322,12 +357,13 @@ const jaMessages: MessageCatalog = {
 const enMessages: MessageCatalog = {
   status: {
     loadingCurrentChat: "Loading current chat",
-    outsideChatGpt: "Open a ChatGPT chat page to view images",
-    chatGptNonChatPage: "This page does not show an image list. Open a ChatGPT chat page.",
-    chatGptImagesPage: "Image URLs loaded on the Images page are added to the dictionary. Open a chat page to view the list.",
-    chatDataNotCaptured: "This chat has not been captured yet. Reload the ChatGPT tab, then refresh the side panel.",
-    noImagesInConversation: "No savable images were found in this chat.",
+    outsideChatGpt: "This is not a ChatGPT page",
+    chatGptNonChatPage: "This is a non-chat ChatGPT page",
+    chatGptImagesPage: "Viewing the Images page",
+    chatDataNotCaptured: "Chat data has not been captured yet",
+    noImagesInConversation: "This chat has no savable images",
     loadFailed: "Failed to load the chat",
+    chatLoaded: "Showing images for this chat",
     loadedPrefix: "Loaded captured data",
     loaded: (input) => {
       const parts = [
@@ -384,7 +420,7 @@ const enMessages: MessageCatalog = {
     outsideChatGpt: "Open a ChatGPT chat page to view images",
     chatGptNonChatPage: "This page does not show an image list. Open a ChatGPT chat page.",
     chatGptImagesPage: "Image URLs loaded on the Images page are added to the dictionary. Open a chat page to view the list.",
-    chatDataNotCaptured: "This chat has not been captured yet. Reload the ChatGPT tab, then refresh the side panel.",
+    chatDataNotCaptured: "Chat data has not been captured yet",
     noImagesInConversation: "No savable images were found in this chat.",
     noMetadata: "No image metadata has been found yet",
     hiddenAttachments: (count) => `${formatCount(count, "attachment image")} hidden. Turn on Attachments to show them.`
@@ -444,6 +480,7 @@ const enMessages: MessageCatalog = {
     selectionActions: "Selection actions",
     contentList: "Image list",
     chat: "Chat",
+    chatId: "ID",
     preparing: "Preparing",
     selectImage: "Select",
     buttons: {
@@ -463,7 +500,25 @@ const enMessages: MessageCatalog = {
       copyImage: "Copy image"
     },
     attachments: "Attachments",
+    dataDetails: "Data details",
+    currentChatData: "Current chat",
+    imagePageImportData: "Images page import",
+    notAvailable: "-",
+    untitledChat: "Title not captured",
+    noChatSelected: "No chat selected",
     selectionSummary: (selected, total) => `${selected} / ${total} selected`,
+    chatDataSummary: (input) => enMessages.status.loaded(input),
+    imageImportSummary: (input) => {
+      const parts = [
+        `Images page import ${formatCount(input.recentImageGenRecordCount, "record")}`,
+        `${formatCount(input.recentImageGenLinkedConversationCount, "linked chat record")}`,
+        `dictionary total ${formatCount(input.totalRecordCount, "record")}`
+      ];
+      if (input.latestCapturedLabel) {
+        parts.push(`last ${input.latestCapturedLabel}`);
+      }
+      return parts.join(" / ");
+    },
     clearDictionaryTitle: "Clear dictionary?",
     clearDictionaryBody:
       "This clears the image URL dictionary stored for this browser session. Chat metadata remains, but images that only have dictionary URLs will be shown as not loaded.",

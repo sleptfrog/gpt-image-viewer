@@ -22,6 +22,22 @@ describe("Side Panel messages", () => {
     expect(messageCatalogs.en.labels.fieldLine(messageCatalogs.en.labels.userInput, "Draw a cat")).toBe(
       "User input: Draw a cat"
     );
+    expect(
+      messageCatalogs.ja.ui.imageImportSummary({
+        totalRecordCount: 8,
+        recentImageGenRecordCount: 5,
+        recentImageGenLinkedConversationCount: 4,
+        latestCapturedLabel: "5月23日 12:34"
+      })
+    ).toBe("画像ページ取り込み 5件 / チャット紐づき 4件 / 辞書合計 8件 / 最終 5月23日 12:34");
+    expect(
+      messageCatalogs.en.ui.imageImportSummary({
+        totalRecordCount: 8,
+        recentImageGenRecordCount: 5,
+        recentImageGenLinkedConversationCount: 4,
+        latestCapturedLabel: "May 23, 12:34 PM"
+      })
+    ).toBe("Images page import 5 records / 4 linked chat records / dictionary total 8 records / last May 23, 12:34 PM");
   });
 
   it("formats loaded status in both locales", () => {

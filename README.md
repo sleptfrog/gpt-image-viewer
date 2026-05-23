@@ -18,6 +18,7 @@ This is not an official ChatGPT or OpenAI product. It depends on ChatGPT Web UI 
 - 選択した画像をZIPで保存
 - PNG/JPEG/WebPにメタデータを埋め込み、埋め込みできない場合はsidecar JSONを同梱
 - ChatGPTの「画像」ページで読み込まれた画像URLを辞書として取り込み、チャット上では表示されていない過去画像の表示にも利用
+- 画像ページ由来の辞書取り込み件数、チャット紐づき件数、最終取り込み時刻をサイドパネルに表示
 - メタデータJSONと画像URL辞書のインポート/エクスポート
 
 English summary:
@@ -29,6 +30,7 @@ English summary:
 - Saves selected images as a ZIP file.
 - Embeds metadata into PNG/JPEG/WebP when possible, and includes sidecar JSON when embedding is unavailable.
 - Imports image URLs loaded by ChatGPT's Images page into a local dictionary, which can help display older images that are not currently rendered in the chat.
+- Shows Images-page import counts, linked chat counts, and the latest import time in the side panel.
 - Supports metadata JSON and image URL dictionary import/export.
 
 ## 保存される情報 / Saved Metadata

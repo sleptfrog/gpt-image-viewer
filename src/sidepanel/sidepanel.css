@@ -96,7 +96,6 @@ h1 {
   color: color-mix(in srgb, CanvasText 68%, transparent);
   font-size: 12px;
   line-height: 1.45;
-  min-height: 4.35em;
   overflow-wrap: anywhere;
 }
 
@@ -143,7 +142,7 @@ h1 {
 
 .toolbar-selection {
   grid-column: 1 / -1;
-  grid-row: 2;
+  grid-row: 3;
   flex-wrap: wrap;
   justify-content: flex-end;
   border-top: 1px solid color-mix(in srgb, CanvasText 8%, transparent);
@@ -315,7 +314,7 @@ h1 {
 
   .toolbar-selection {
     grid-column: 1 / -1;
-    grid-row: 2;
+    grid-row: 3;
     justify-content: stretch;
   }
 
@@ -326,6 +325,55 @@ h1 {
   .toolbar-selection .toolbar-button {
     flex: 1 1 130px;
   }
+}
+
+.activity-status {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  color: color-mix(in srgb, CanvasText 72%, transparent);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  padding: 0 0 2px;
+}
+
+.activity-status[hidden] {
+  display: none;
+}
+
+.data-details {
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 10%, transparent);
+  color: color-mix(in srgb, CanvasText 66%, transparent);
+  font-size: 12px;
+}
+
+.data-details summary {
+  cursor: pointer;
+  list-style-position: inside;
+  padding: 8px 14px;
+  user-select: none;
+}
+
+.data-details-grid {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0 14px 10px;
+}
+
+.data-details-grid div {
+  display: grid;
+  gap: 2px;
+}
+
+.data-details-grid dt {
+  color: color-mix(in srgb, CanvasText 54%, transparent);
+  font-weight: 650;
+}
+
+.data-details-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .download-progress {
@@ -363,20 +411,45 @@ h1 {
 }
 
 .conversation {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 8px;
   border-bottom: 1px solid color-mix(in srgb, CanvasText 10%, transparent);
-  padding: 8px 14px;
   font-size: 12px;
 }
 
-.conversation-label {
+.conversation summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+  list-style-position: inside;
+  padding: 8px 14px;
+  user-select: none;
+}
+
+.conversation-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 0 14px 10px;
+}
+
+.conversation-label,
+.conversation-id-label {
   color: color-mix(in srgb, CanvasText 58%, transparent);
+}
+
+.conversation-title {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, CanvasText 84%, transparent);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .conversation-id {
   overflow-wrap: anywhere;
+  color: color-mix(in srgb, CanvasText 68%, transparent);
 }
 
 .content {
