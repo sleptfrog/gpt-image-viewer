@@ -3,6 +3,7 @@ import { stripRawMetadata } from "../metadata/write-metadata";
 
 export type CapturedConversationSnapshot = {
   conversationId: string;
+  conversationTitle?: string;
   responseUrl?: string;
   capturedAt: string;
   items: ImageMetadata[];

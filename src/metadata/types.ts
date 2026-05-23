@@ -30,6 +30,7 @@ export type ParseChatGptOptions = {
 
 export type ParseChatGptResult = {
   conversationId?: string;
+  conversationTitle?: string;
   diagnostics: ParseDiagnostic[];
   items: ImageMetadata[];
 };

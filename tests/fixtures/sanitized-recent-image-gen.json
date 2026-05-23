@@ -19,7 +19,8 @@
       "asset_pointer": "sediment://file_recent_image_1",
       "conversation_id": "conv_recent_sanitized",
       "message_id": "message_recent_1",
-      "created_at": 1700000200
+      "created_at": 1700000200,
+      "caption": "A sanitized caption from the Images page."
     },
     {
       "id": "s_sanitized_2",
@@ -30,7 +31,10 @@
       "encodings": {},
       "conversation_id": "conv_recent_sanitized",
       "message_id": "message_recent_2",
-      "created_at": 1700000300
+      "created_at": 1700000300,
+      "generation_id": "s_sanitized_2_generation",
+      "width": 1024,
+      "height": 1024
     }
   ],
   "cursor": "sanitized-next-cursor"

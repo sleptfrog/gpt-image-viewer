@@ -9,6 +9,7 @@ type CaptureConversationItemsMessage = {
   payload?: {
     url?: string;
     conversationId?: string;
+    conversationTitle?: string;
     capturedAt?: string;
     items?: ImageMetadata[];
   };
@@ -68,6 +69,7 @@ async function handleCaptureMessage(message: CaptureMessage): Promise<number> {
 
   await saveCapturedConversation({
     conversationId,
+    conversationTitle: message.payload?.conversationTitle,
     responseUrl: message.payload?.url,
     capturedAt: message.payload?.capturedAt ?? new Date().toISOString(),
     items: items.slice(0, MAX_ITEMS).map(stripRawMetadata)
@@ -83,7 +85,13 @@ function isCaptureMessage(message: unknown): message is CaptureMessage {
 
   if (message.type === "gpt-image-viewer:capture-conversation-items") {
     const payload = isRecord(message.payload) ? message.payload : undefined;
-    return !!payload && isOptionalSafeChatGptUrl(payload.url) && isOptionalShortString(payload.conversationId) && isOptionalIsoLikeString(payload.capturedAt);
+    return (
+      !!payload &&
+      isOptionalSafeChatGptUrl(payload.url) &&
+      isOptionalShortString(payload.conversationId) &&
+      isOptionalLongString(payload.conversationTitle) &&
+      isOptionalIsoLikeString(payload.capturedAt)
+    );
   }
 
   if (message.type === "gpt-image-viewer:capture-image-url-records") {
@@ -135,10 +143,18 @@ function isImageUrlRecord(value: unknown): value is ImageUrlRecord {
   return (
     isOptionalSafeChatGptUrl(value.imageUrl) &&
     isOptionalSafeChatGptUrl(value.thumbnailUrl) &&
+    isOptionalShortString(value.assetPointer) &&
+    isOptionalShortString(value.recentItemId) &&
+    isOptionalShortString(value.generationId) &&
+    isOptionalShortString(value.generationType) &&
+    isOptionalShortString(value.kind) &&
     isOptionalShortString(value.conversationId) &&
     isOptionalShortString(value.messageId) &&
     isOptionalLongString(value.title) &&
+    isOptionalLongString(value.caption) &&
     isOptionalLongString(value.prompt) &&
+    isOptionalPositiveInteger(value.width) &&
+    isOptionalPositiveInteger(value.height) &&
     isOptionalShortString(value.createdAt)
   );
 }
@@ -161,6 +177,10 @@ function isIsoLikeString(value: unknown): value is string {
 
 function isOptionalIsoLikeString(value: unknown): boolean {
   return value === undefined || isIsoLikeString(value);
+}
+
+function isOptionalPositiveInteger(value: unknown): boolean {
+  return value === undefined || (typeof value === "number" && Number.isInteger(value) && value > 0 && value <= 100_000);
 }
 
 function isImageId(value: unknown): value is string {

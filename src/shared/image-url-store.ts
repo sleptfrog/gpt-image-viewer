@@ -4,10 +4,18 @@ export type ImageUrlRecord = {
   imageId: string;
   imageUrl?: string;
   thumbnailUrl?: string;
+  assetPointer?: string;
+  recentItemId?: string;
+  generationId?: string;
+  generationType?: string;
+  kind?: string;
   conversationId?: string;
   messageId?: string;
   title?: string;
+  caption?: string;
   prompt?: string;
+  width?: number;
+  height?: number;
   createdAt?: string;
   capturedAt: string;
   source: "recent-image-gen" | "page-dom" | "probe";
@@ -19,6 +27,13 @@ export type ImageUrlRecordsExport = {
   schemaVersion: 1;
   exportedAt: string;
   records: ImageUrlRecord[];
+};
+
+export type ImageUrlRecordStats = {
+  totalRecordCount: number;
+  recentImageGenRecordCount: number;
+  recentImageGenLinkedConversationCount: number;
+  latestRecentImageGenCapturedAt?: string;
 };
 
 export async function loadImageUrlRecords(): Promise<Map<string, ImageUrlRecord>> {
@@ -97,10 +112,18 @@ export function recentImageGenToImageUrlRecord(record: RecentImageGenUrlRecord):
     imageId: record.imageId,
     imageUrl: record.imageUrl,
     thumbnailUrl: record.thumbnailUrl,
+    assetPointer: record.assetPointer,
+    recentItemId: record.recentItemId,
+    generationId: record.generationId,
+    generationType: record.generationType,
+    kind: record.kind,
     conversationId: record.conversationId,
     messageId: record.messageId,
     title: record.title,
+    caption: record.caption,
     prompt: record.prompt,
+    width: record.width,
+    height: record.height,
     createdAt: record.createdAt,
     capturedAt: record.capturedAt,
     source: "recent-image-gen"
@@ -114,13 +137,50 @@ export function mergeImageUrlRecord(existing: ImageUrlRecord, incoming: ImageUrl
     imageId: existing.imageId,
     imageUrl: incoming.imageUrl ?? existing.imageUrl,
     thumbnailUrl: incoming.thumbnailUrl ?? existing.thumbnailUrl,
+    assetPointer: incoming.assetPointer ?? existing.assetPointer,
+    recentItemId: incoming.recentItemId ?? existing.recentItemId,
+    generationId: incoming.generationId ?? existing.generationId,
+    generationType: incoming.generationType ?? existing.generationType,
+    kind: incoming.kind ?? existing.kind,
     conversationId: incoming.conversationId ?? existing.conversationId,
     messageId: preferIncomingIdentity ? incoming.messageId ?? existing.messageId : existing.messageId ?? incoming.messageId,
     title: incoming.title ?? existing.title,
+    caption: incoming.caption ?? existing.caption,
     prompt: incoming.prompt ?? existing.prompt,
+    width: incoming.width ?? existing.width,
+    height: incoming.height ?? existing.height,
     createdAt: existing.createdAt ?? incoming.createdAt,
     capturedAt: incoming.capturedAt,
     source: imageUrlRecordScore(incoming) >= imageUrlRecordScore(existing) ? incoming.source : existing.source
+  };
+}
+
+export function getImageUrlRecordStats(records: Iterable<ImageUrlRecord>): ImageUrlRecordStats {
+  let totalRecordCount = 0;
+  let recentImageGenRecordCount = 0;
+  let recentImageGenLinkedConversationCount = 0;
+  let latestRecentImageGenCapturedAt: string | undefined;
+
+  for (const record of records) {
+    totalRecordCount += 1;
+    if (record.source !== "recent-image-gen") {
+      continue;
+    }
+
+    recentImageGenRecordCount += 1;
+    if (record.conversationId) {
+      recentImageGenLinkedConversationCount += 1;
+    }
+    if (!latestRecentImageGenCapturedAt || Date.parse(record.capturedAt) > Date.parse(latestRecentImageGenCapturedAt)) {
+      latestRecentImageGenCapturedAt = record.capturedAt;
+    }
+  }
+
+  return {
+    totalRecordCount,
+    recentImageGenRecordCount,
+    recentImageGenLinkedConversationCount,
+    latestRecentImageGenCapturedAt
   };
 }
 
@@ -145,7 +205,8 @@ function imageUrlRecordScore(record: ImageUrlRecord): number {
   return [
     record.imageUrl ? 4 : 0,
     record.thumbnailUrl ? 2 : 0,
-    record.title ? 1 : 0,
+    record.title || record.caption ? 1 : 0,
+    record.conversationId ? 1 : 0,
     record.source === "recent-image-gen" ? 1 : 0
   ].reduce((sum, value) => sum + value, 0);
 }

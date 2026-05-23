@@ -58,6 +58,7 @@ function postCapturedResponse(url: string, body: string): void {
         type: "conversation-items",
         url,
         conversationId: result.conversationId,
+        conversationTitle: result.conversationTitle,
         capturedAt,
         items: result.items.slice(0, MAX_ITEMS)
       },

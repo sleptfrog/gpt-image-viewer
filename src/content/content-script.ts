@@ -18,10 +18,18 @@ type ImageUrlMessageRecord = {
   imageId: string;
   imageUrl?: string;
   thumbnailUrl?: string;
+  assetPointer?: string;
+  recentItemId?: string;
+  generationId?: string;
+  generationType?: string;
+  kind?: string;
   conversationId?: string;
   messageId?: string;
   title?: string;
+  caption?: string;
   prompt?: string;
+  width?: number;
+  height?: number;
   createdAt?: string;
   capturedAt: string;
   source: "recent-image-gen";
@@ -34,6 +42,7 @@ type PageHookMessage = {
   url?: string;
   capturedAt: string;
   conversationId?: string;
+  conversationTitle?: string;
   items?: ImageMetadataMessageItem[];
   records?: ImageUrlMessageRecord[];
 };
@@ -58,6 +67,7 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
           payload: {
             url: data.url,
             conversationId: data.conversationId,
+            conversationTitle: data.conversationTitle,
             capturedAt: data.capturedAt,
             items: data.items
           }
@@ -93,6 +103,7 @@ function isPageHookMessage(value: unknown): value is PageHookMessage {
   if (value.type === "conversation-items") {
     return (
       isOptionalShortString(value.conversationId) &&
+      isOptionalLongString(value.conversationTitle) &&
       Array.isArray(value.items) &&
       value.items.length <= MAX_ITEMS &&
       value.items.every(isImageMetadataMessageItem)
@@ -137,10 +148,18 @@ function isImageUrlMessageRecord(value: unknown): value is ImageUrlMessageRecord
   return (
     isOptionalSafeUrl(value.imageUrl) &&
     isOptionalSafeUrl(value.thumbnailUrl) &&
+    isOptionalShortString(value.assetPointer) &&
+    isOptionalShortString(value.recentItemId) &&
+    isOptionalShortString(value.generationId) &&
+    isOptionalShortString(value.generationType) &&
+    isOptionalShortString(value.kind) &&
     isOptionalShortString(value.conversationId) &&
     isOptionalShortString(value.messageId) &&
     isOptionalLongString(value.title) &&
+    isOptionalLongString(value.caption) &&
     isOptionalLongString(value.prompt) &&
+    isOptionalPositiveInteger(value.width) &&
+    isOptionalPositiveInteger(value.height) &&
     isOptionalShortString(value.createdAt)
   );
 }
@@ -159,6 +178,10 @@ function isOptionalLongString(value: unknown): boolean {
 
 function isIsoLikeString(value: unknown): boolean {
   return typeof value === "string" && value.length >= 10 && value.length <= 64;
+}
+
+function isOptionalPositiveInteger(value: unknown): boolean {
+  return value === undefined || (typeof value === "number" && Number.isInteger(value) && value > 0 && value <= 100_000);
 }
 
 function isImageId(value: unknown): value is string {

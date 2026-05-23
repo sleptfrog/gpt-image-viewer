@@ -20,6 +20,7 @@ describe("parseChatGptResponse", () => {
     });
 
     expect(result.conversationId).toBe("conv_sanitized");
+    expect(result.conversationTitle).toBe("Sanitized test chat");
     expect(result.items).toHaveLength(1);
     expect(result.items[0]).toMatchObject({
       source: "chatgpt-web",

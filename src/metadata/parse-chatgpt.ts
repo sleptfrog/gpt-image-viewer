@@ -51,6 +51,7 @@ export function parseChatGptResponse(options: ParseChatGptOptions): ParseChatGpt
 
   const merged = new Map<string, ImageMetadata>();
   let conversationId = extractConversationIdFromUrl(options.responseUrl);
+  let conversationTitle: string | undefined;
 
   for (const document of documents) {
     const result = parseJsonDocument(document, {
@@ -60,6 +61,7 @@ export function parseChatGptResponse(options: ParseChatGptOptions): ParseChatGpt
     });
 
     conversationId = result.conversationId ?? conversationId;
+    conversationTitle = result.conversationTitle ?? conversationTitle;
     diagnostics.push(...result.diagnostics);
 
     for (const item of result.items) {
@@ -75,6 +77,7 @@ export function parseChatGptResponse(options: ParseChatGptOptions): ParseChatGpt
 
   return {
     conversationId,
+    conversationTitle,
     diagnostics,
     items: [...merged.values()]
   };
@@ -202,6 +205,7 @@ function parseConversationDocument(
   }
 ): ParseChatGptResult {
   const conversationId = asString(document.conversation_id) ?? extractConversationIdFromUrl(context.responseUrl);
+  const conversationTitle = extractConversationTitle(document);
   const nodes = normalizeConversationNodes(document.mapping);
   const promptCandidates = collectPromptCandidates(nodes);
   const userInputCandidates = collectUserInputCandidates(nodes);
@@ -222,9 +226,15 @@ function parseConversationDocument(
 
   return {
     conversationId,
+    conversationTitle,
     diagnostics: [{ level: "info", message: `Parsed ${nodes.size} conversation node(s)` }],
     items: [...merged.values()]
   };
+}
+
+
+function extractConversationTitle(document: JsonRecord): string | undefined {
+  return asString(document.title) ?? asString(document.name) ?? asString(document.conversation_title);
 }
 
 function normalizeConversationNodes(mapping: unknown): Map<string, ConversationNode> {

@@ -15,6 +15,7 @@ describe("content capture extraction", () => {
     });
 
     expect(result.conversationId).toBe("conv_sanitized");
+    expect(result.conversationTitle).toBe("Sanitized test chat");
     expect(result.hasConversationMapping).toBe(true);
     expect(result.items).toHaveLength(1);
     expect(result.items[0]).toMatchObject({
@@ -85,10 +86,18 @@ describe("content capture extraction", () => {
       imageId: "file_recent_image_1",
       imageUrl: "https://chatgpt.com/backend-api/estuary/content?id=file_recent_image_1&cp=pri&ma=90000&ts=12345&p=igh&cid=1&sig=redacted-image-sig&v=0",
       thumbnailUrl: "https://chatgpt.com/backend-api/estuary/content?id=thumb%23file_recent_image_1%23thumbnail&cp=pri&ma=90000&ts=12345&p=igh&cid=1&sig=redacted-thumb-sig&v=0",
+      assetPointer: "sediment://file_recent_image_1",
+      recentItemId: "s_sanitized_1",
+      generationId: "s_sanitized_1",
+      generationType: "image_gen",
+      kind: "media_generation",
       conversationId: "conv_recent_sanitized",
       messageId: "message_recent_1",
       title: "Sanitized recent image",
+      caption: "A sanitized caption from the Images page.",
       prompt: "A sanitized recent image prompt.",
+      width: 1448,
+      height: 1086,
       createdAt: "2023-11-14T22:16:40.000Z",
       capturedAt: "2026-05-19T00:00:00.000Z",
       source: "recent-image-gen"

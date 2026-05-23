@@ -2,10 +2,18 @@ export type RecentImageGenUrlRecord = {
   imageId: string;
   imageUrl?: string;
   thumbnailUrl?: string;
+  assetPointer?: string;
+  recentItemId?: string;
+  generationId?: string;
+  generationType?: string;
+  kind?: string;
   conversationId?: string;
   messageId?: string;
   title?: string;
+  caption?: string;
   prompt?: string;
+  width?: number;
+  height?: number;
   createdAt?: string;
   capturedAt: string;
   source: "recent-image-gen";
@@ -78,7 +86,8 @@ function parseRecentImageGenItem(item: unknown, capturedAt: string): RecentImage
 
   const imageUrl = asString(item.url);
   const thumbnailUrl = extractThumbnailUrl(item);
-  const imageId = imageIdFromAssetPointer(asString(item.asset_pointer)) ?? imageIdFromEstuaryUrl(imageUrl);
+  const assetPointer = asString(item.asset_pointer);
+  const imageId = imageIdFromAssetPointer(assetPointer) ?? imageIdFromEstuaryUrl(imageUrl) ?? imageIdFromEstuaryUrl(thumbnailUrl);
 
   if (!imageId || (!imageUrl && !thumbnailUrl)) {
     return [];
@@ -89,11 +98,19 @@ function parseRecentImageGenItem(item: unknown, capturedAt: string): RecentImage
       imageId,
       imageUrl,
       thumbnailUrl,
-      conversationId: asString(item.conversation_id),
-      messageId: asString(item.message_id),
-      title: asString(item.title),
-      prompt: asString(item.prompt) ?? asString(item.recreation_prompt),
-      createdAt: timestampToIso(asNumber(item.created_at)),
+      assetPointer,
+      recentItemId: asString(item.id),
+      generationId: asString(item.generation_id),
+      generationType: asString(item.generation_type),
+      kind: asString(item.kind),
+      conversationId: firstString(item.conversation_id, item.conversationId, nestedString(item.conversation, "id")),
+      messageId: firstString(item.message_id, item.messageId, nestedString(item.message, "id")),
+      title: firstString(item.title, nestedString(item.metadata, "image_gen_title")),
+      caption: firstString(item.caption, item.description, nestedString(item.metadata, "caption")),
+      prompt: firstString(item.prompt, item.recreation_prompt, item.generation_prompt, nestedString(item.metadata, "prompt")),
+      width: asPositiveInteger(item.width),
+      height: asPositiveInteger(item.height),
+      createdAt: timestampToIso(firstNumber(item.created_at, item.createdAt, item.create_time, item.timestamp)),
       capturedAt,
       source: "recent-image-gen"
     }
@@ -160,4 +177,33 @@ function asString(value: unknown): string | undefined {
 
 function asNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function asPositiveInteger(value: unknown): number | undefined {
+  const number = asNumber(value);
+  return number !== undefined && Number.isInteger(number) && number > 0 ? number : undefined;
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    const string = asString(value);
+    if (string) {
+      return string;
+    }
+  }
+  return undefined;
+}
+
+function firstNumber(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    const number = asNumber(value);
+    if (number !== undefined) {
+      return number;
+    }
+  }
+  return undefined;
+}
+
+function nestedString(value: unknown, key: string): string | undefined {
+  return isRecord(value) ? asString(value[key]) : undefined;
 }
