@@ -33,14 +33,6 @@ export function createZipArchive(files: ZipFileEntry[]): Uint8Array {
   return concatBytes(...localParts, centralDirectory, end);
 }
 
-export function createZipBlob(files: ZipFileEntry[]): Blob {
-  const builder = new ZipBlobBuilder();
-  for (const file of files) {
-    builder.addFile(file);
-  }
-  return builder.createBlob();
-}
-
 export class ZipBlobBuilder {
   private readonly localParts: BlobPart[] = [];
   private readonly centralParts: BlobPart[] = [];
