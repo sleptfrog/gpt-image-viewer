@@ -62,6 +62,14 @@ export type MessageCatalog = {
     dictionaryExportFailed: string;
     dictionaryClearFailed: string;
     dictionaryImportFailed: string;
+    imagePageScrollUnavailable: string;
+    imagePageScrollStarting: string;
+    imagePageScrollStopping: string;
+    imagePageScrollProgress: (count: number) => string;
+    imagePageScrollStopped: (count: number) => string;
+    imagePageScrollCompleted: (count: number) => string;
+    imagePageScrollTimedOut: (count: number) => string;
+    imagePageScrollFailed: string;
   };
   empty: {
     loading: string;
@@ -132,6 +140,8 @@ export type MessageCatalog = {
     selectImage: string;
     buttons: {
       refresh: string;
+      startImagePageScroll: string;
+      stopImagePageScroll: string;
       exportJson: string;
       exportDictionary: string;
       importDictionary: string;
@@ -231,7 +241,15 @@ const jaMessages: MessageCatalog = {
     dictionaryReloading: "辞書なしで再読み込み中",
     dictionaryExportFailed: "辞書の書き出しに失敗しました",
     dictionaryClearFailed: "辞書の全削除に失敗しました",
-    dictionaryImportFailed: "辞書の読み込みに失敗しました"
+    dictionaryImportFailed: "辞書の読み込みに失敗しました",
+    imagePageScrollUnavailable: "ChatGPTの画像ページで実行してください",
+    imagePageScrollStarting: "画像ページを読み進めています",
+    imagePageScrollStopping: "画像ページの読み進めを停止しています",
+    imagePageScrollProgress: (count) => `画像ページを読み進めています（${count}件）`,
+    imagePageScrollStopped: (count) => `画像ページの読み進めを停止しました（${count}件）`,
+    imagePageScrollCompleted: (count) => `画像ページの読み進めが完了しました（${count}件）`,
+    imagePageScrollTimedOut: (count) => `画像ページの読み進めが上限に達しました（${count}件）`,
+    imagePageScrollFailed: "画像ページの読み進めに失敗しました"
   },
   empty: {
     loading: "読み込み中",
@@ -303,6 +321,8 @@ const jaMessages: MessageCatalog = {
     selectImage: "選択",
     buttons: {
       refresh: "更新",
+      startImagePageScroll: "画像データ自動取り込み",
+      stopImagePageScroll: "停止",
       exportJson: "メタデータJSONを書き出し",
       exportDictionary: "辞書を書き出し",
       importDictionary: "辞書を読み込み",
@@ -413,7 +433,15 @@ const enMessages: MessageCatalog = {
     dictionaryReloading: "Reloading without dictionary URLs",
     dictionaryExportFailed: "Failed to export the dictionary",
     dictionaryClearFailed: "Failed to clear the dictionary",
-    dictionaryImportFailed: "Failed to import the dictionary"
+    dictionaryImportFailed: "Failed to import the dictionary",
+    imagePageScrollUnavailable: "Run this on ChatGPT's Images page",
+    imagePageScrollStarting: "Reading through the Images page",
+    imagePageScrollStopping: "Stopping Images page reading",
+    imagePageScrollProgress: (count) => `Reading through the Images page (${formatCount(count, "record")})`,
+    imagePageScrollStopped: (count) => `Stopped reading the Images page (${formatCount(count, "record")})`,
+    imagePageScrollCompleted: (count) => `Finished reading the Images page (${formatCount(count, "record")})`,
+    imagePageScrollTimedOut: (count) => `Images page reading reached the limit (${formatCount(count, "record")})`,
+    imagePageScrollFailed: "Failed to read through the Images page"
   },
   empty: {
     loading: "Loading",
@@ -485,6 +513,8 @@ const enMessages: MessageCatalog = {
     selectImage: "Select",
     buttons: {
       refresh: "Refresh",
+      startImagePageScroll: "Auto import image data",
+      stopImagePageScroll: "Stop",
       exportJson: "Export metadata JSON",
       exportDictionary: "Export dictionary",
       importDictionary: "Import dictionary",

@@ -18,7 +18,7 @@ import {
 import { createZipArchive, type ZipFileEntry } from "../shared/zip";
 import { getMessages, type LoadedStatusInput, type MessageCatalog } from "./messages";
 
-type IconName = "refresh" | "save" | "copy" | "export" | "import" | "trash";
+type IconName = "refresh" | "save" | "copy" | "export" | "import" | "trash" | "scroll";
 
 type PageImageCandidate = {
   imageId: string;
@@ -46,6 +46,15 @@ type LoadedConversationMetadata = {
   conversationTitle?: string;
 };
 
+type AutoScrollStepResult = {
+  available: boolean;
+  moved: boolean;
+  scrollTop: number;
+  scrollHeight: number;
+};
+
+type ToolbarMode = "conversation" | "images" | "other";
+
 const { locale, messages } = getMessages();
 
 document.documentElement.lang = locale;
@@ -61,6 +70,8 @@ const conversationTitleEl = queryRequired<HTMLSpanElement>("#conversation-title"
 const conversationIdEl = queryRequired<HTMLSpanElement>("#conversation-id");
 const contentEl = queryRequired<HTMLElement>("#content");
 const refreshButton = queryRequired<HTMLButtonElement>("#refresh");
+const imagePageScrollButton = queryRequired<HTMLButtonElement>("#image-page-scroll");
+const toolbarViewGroup = queryRequired<HTMLElement>(".toolbar-view");
 const activityStatusEl = queryRequired<HTMLElement>("#activity-status");
 const dataDetailsEl = queryRequired<HTMLDetailsElement>("#data-details");
 const chatDataSummaryEl = queryRequired<HTMLElement>("#chat-data-summary");
@@ -107,6 +118,9 @@ let currentPreviewUrls = new Map<string, string>();
 let currentChatDataSummary: LoadedStatusInput | undefined;
 let selectedItemKeys = new Set<string>();
 let showUserAttachments = false;
+let isPanelBusy = false;
+let toolbarMode: ToolbarMode = "other";
+let isImagePageAutoScrollRunning = false;
 let loadSequence = 0;
 let autoRefreshTimer: number | undefined;
 let pendingLoadOptions: LoadOptions = {};
@@ -171,6 +185,7 @@ function resolveMessagePath(catalog: MessageCatalog, path: string | undefined): 
 
 function applyButtonIcons(): void {
   decorateButton(refreshButton, "refresh");
+  decorateButton(imagePageScrollButton, "scroll");
   decorateButton(downloadSelectedButton, "save");
   decorateButton(exportJsonButton, "export");
   decorateButton(exportDictionaryButton, "export");
@@ -218,7 +233,9 @@ const iconSvg: Record<IconName, string> = {
   export: '<svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg>',
   import: '<svg viewBox="0 0 24 24"><path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M5 3h14"/></svg>',
   trash:
-    '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>'
+    '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>',
+  scroll:
+    '<svg viewBox="0 0 24 24"><path d="M12 4v14"/><path d="m7 13 5 5 5-5"/><path d="M5 4h14"/></svg>'
 };
 
 applyButtonIcons();
@@ -280,6 +297,25 @@ function setConversationInfo(conversationId?: string, conversationTitle?: string
   conversationIdEl.textContent = conversationId || "-";
 }
 
+function setToolbarMode(mode: ToolbarMode): void {
+  toolbarMode = mode;
+  updateToolbarControls();
+}
+
+function updateToolbarControls(): void {
+  const isConversationPage = toolbarMode === "conversation";
+  const isImagesPage = toolbarMode === "images";
+
+  refreshButton.hidden = !isConversationPage;
+  toolbarViewGroup.hidden = !isConversationPage;
+  imagePageScrollButton.hidden = !isImagesPage && !isImagePageAutoScrollRunning;
+  imagePageScrollButton.disabled = (!isImagesPage && !isImagePageAutoScrollRunning) || (isPanelBusy && !isImagePageAutoScrollRunning);
+  imagePageScrollButton.textContent = isImagePageAutoScrollRunning
+    ? messages.ui.buttons.stopImagePageScroll
+    : messages.ui.buttons.startImagePageScroll;
+  decorateButton(imagePageScrollButton, "scroll");
+}
+
 function hideDownloadProgress(): void {
   downloadProgress.hidden = true;
   downloadProgressLabel.textContent = "";
@@ -301,6 +337,7 @@ function updateDownloadProgress(label: string, completed: number, total: number)
 async function loadCurrentConversation(options: LoadOptions = {}): Promise<void> {
   const sequence = (loadSequence += 1);
   const shouldCollectPageImages = options.collectPageImages ?? true;
+  setToolbarMode("other");
   setBusy(true);
   hideDownloadProgress();
   currentItems = [];
@@ -309,13 +346,16 @@ async function loadCurrentConversation(options: LoadOptions = {}): Promise<void>
   selectedItemKeys = new Set();
   setConversationInfo();
   resetDataDetails();
-  setActivityStatus();
+  if (!isImagePageAutoScrollRunning) {
+    setActivityStatus();
+  }
   setStatus(options.status ?? messages.status.loadingCurrentChat);
   renderEmptyContent(messages.empty.loading);
 
   try {
     const tab = await getActiveTab();
     const pageContext = classifyChatGptPageUrl(tab.url);
+    setToolbarMode(pageContext.kind === "conversation" ? "conversation" : pageContext.kind === "images" ? "images" : "other");
 
     if (sequence !== loadSequence) {
       return;
@@ -687,6 +727,7 @@ function sortItems(items: ImageMetadata[]): ImageMetadata[] {
 }
 
 function setBusy(isBusy: boolean): void {
+  isPanelBusy = isBusy;
   refreshButton.disabled = isBusy;
   showAttachmentsToggle.disabled = isBusy;
   updateSelectionControls(isBusy);
@@ -694,6 +735,7 @@ function setBusy(isBusy: boolean): void {
   exportDictionaryButton.disabled = isBusy;
   importDictionaryButton.disabled = isBusy;
   clearDictionaryButton.disabled = isBusy;
+  updateToolbarControls();
   if (isBusy) {
     moreActionsMenu.open = false;
   }
@@ -1607,6 +1649,185 @@ function wireAutoRefreshEvents(): void {
   });
 }
 
+async function toggleImagePageAutoScroll(): Promise<void> {
+  if (isImagePageAutoScrollRunning) {
+    isImagePageAutoScrollRunning = false;
+    updateToolbarControls();
+    setActivityStatus(messages.status.imagePageScrollStopping);
+    return;
+  }
+
+  const tab = await getActiveTab();
+  const pageContext = classifyChatGptPageUrl(tab.url);
+  if (!tab.id || pageContext.kind !== "images") {
+    setActivityStatus(messages.status.imagePageScrollUnavailable);
+    setToolbarMode("other");
+    return;
+  }
+
+  isImagePageAutoScrollRunning = true;
+  setToolbarMode("images");
+  updateToolbarControls();
+  setActivityStatus(messages.status.imagePageScrollStarting);
+
+  const maxSteps = 240;
+  const delayMs = 900;
+  const stableScrollLimit = 6;
+  const stableImportLimit = 8;
+  let stableScrollCount = 0;
+  let stableImportCount = 0;
+  let previousImportCount = await getRecentImageGenRecordCount();
+  let lastReason: "completed" | "stopped" | "limit" | "unavailable" = "limit";
+
+  try {
+    for (let step = 0; step < maxSteps; step += 1) {
+      if (!isImagePageAutoScrollRunning) {
+        lastReason = "stopped";
+        break;
+      }
+
+      const [result] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: scrollChatGptImagesPageOnce,
+        args: [{ stepRatio: 0.82 }]
+      });
+      const scrollResult = result?.result as AutoScrollStepResult | undefined;
+      if (!scrollResult?.available) {
+        lastReason = "unavailable";
+        break;
+      }
+
+      await delay(delayMs);
+      const importCount = await refreshImageImportSummaryAndCount();
+      stableScrollCount = scrollResult.moved ? 0 : stableScrollCount + 1;
+      stableImportCount = importCount > previousImportCount ? 0 : stableImportCount + 1;
+      previousImportCount = importCount;
+
+      setActivityStatus(messages.status.imagePageScrollProgress(importCount));
+
+      if (stableScrollCount >= stableScrollLimit || stableImportCount >= stableImportLimit) {
+        lastReason = "completed";
+        break;
+      }
+    }
+
+    if (lastReason === "limit") {
+      setActivityStatus(messages.status.imagePageScrollTimedOut(previousImportCount));
+    } else if (lastReason === "stopped") {
+      setActivityStatus(messages.status.imagePageScrollStopped(previousImportCount));
+    } else if (lastReason === "unavailable") {
+      setActivityStatus(messages.status.imagePageScrollUnavailable);
+    } else {
+      setActivityStatus(messages.status.imagePageScrollCompleted(previousImportCount));
+    }
+  } catch (error) {
+    setActivityStatus(messages.status.imagePageScrollFailed);
+    console.warn("Failed to auto-scroll ChatGPT Images page", error);
+  } finally {
+    isImagePageAutoScrollRunning = false;
+    updateToolbarControls();
+    await refreshImageImportSummary();
+  }
+}
+
+async function refreshImageImportSummary(): Promise<void> {
+  await refreshImageImportSummaryAndCount();
+}
+
+async function refreshImageImportSummaryAndCount(): Promise<number> {
+  const records = await loadImageUrlRecords().catch((error: unknown) => {
+    console.warn("Failed to load image URL records", error);
+    return new Map<string, ImageUrlRecord>();
+  });
+  const stats = getImageUrlRecordStats(records.values());
+  setImageImportSummary(stats);
+  return stats.recentImageGenRecordCount;
+}
+
+async function getRecentImageGenRecordCount(): Promise<number> {
+  const records = await loadImageUrlRecords().catch(() => new Map<string, ImageUrlRecord>());
+  return getImageUrlRecordStats(records.values()).recentImageGenRecordCount;
+}
+
+type PageScrollStepOptions = {
+  stepRatio: number;
+};
+
+function scrollChatGptImagesPageOnce(options: PageScrollStepOptions): AutoScrollStepResult {
+  const scrollTarget = findBestScrollTarget();
+  if (!scrollTarget) {
+    return { available: false, moved: false, scrollTop: 0, scrollHeight: 0 };
+  }
+
+  const beforeTop = getScrollTop(scrollTarget);
+  const beforeHeight = getScrollHeight(scrollTarget);
+  const distance = Math.max(480, Math.floor(getClientHeight(scrollTarget) * options.stepRatio));
+  scrollByDistance(scrollTarget, distance);
+
+  const afterTop = getScrollTop(scrollTarget);
+  const afterHeight = getScrollHeight(scrollTarget);
+  return {
+    available: true,
+    moved: Math.abs(afterTop - beforeTop) > 4 || afterHeight > beforeHeight + 4,
+    scrollTop: afterTop,
+    scrollHeight: afterHeight
+  };
+
+  function findBestScrollTarget(): Element | undefined {
+    const candidates = [document.scrollingElement, document.documentElement, document.body, ...document.querySelectorAll("*")].filter(
+      (element): element is Element => Boolean(element)
+    );
+
+    let best: Element | undefined;
+    let bestScore = 0;
+    for (const element of candidates) {
+      const scrollHeight = getScrollHeight(element);
+      const clientHeight = getClientHeight(element);
+      const overflow = scrollHeight - clientHeight;
+      if (overflow < 300) {
+        continue;
+      }
+
+      const rect = element.getBoundingClientRect();
+      const visibleWidth = Math.max(0, Math.min(rect.right, window.innerWidth) - Math.max(rect.left, 0));
+      const visibleHeight = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
+      const score = overflow + (visibleWidth * visibleHeight) / 1000;
+      if (score > bestScore) {
+        best = element;
+        bestScore = score;
+      }
+    }
+
+    return best;
+  }
+
+  function getScrollTop(element: Element): number {
+    return element === document.scrollingElement || element === document.documentElement || element === document.body
+      ? window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0
+      : element.scrollTop;
+  }
+
+  function getScrollHeight(element: Element): number {
+    return element === document.scrollingElement || element === document.documentElement || element === document.body
+      ? Math.max(document.documentElement.scrollHeight, document.body.scrollHeight)
+      : element.scrollHeight;
+  }
+
+  function getClientHeight(element: Element): number {
+    return element === document.scrollingElement || element === document.documentElement || element === document.body
+      ? window.innerHeight
+      : element.clientHeight;
+  }
+
+  function scrollByDistance(element: Element, distance: number): void {
+    if (element === document.scrollingElement || element === document.documentElement || element === document.body) {
+      window.scrollBy({ top: distance, behavior: "auto" });
+      return;
+    }
+    element.scrollBy({ top: distance, behavior: "auto" });
+  }
+}
+
 function formatDisplayDate(iso: string): string {
   return new Date(iso).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", {
     month: "short",
@@ -1619,6 +1840,10 @@ function formatDisplayDate(iso: string): string {
 function formatTimestampForFilename(iso: string): string {
   return iso.replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
 }
+
+imagePageScrollButton.addEventListener("click", () => {
+  void toggleImagePageAutoScroll();
+});
 
 refreshButton.addEventListener("click", () => {
   void loadCurrentConversation({
