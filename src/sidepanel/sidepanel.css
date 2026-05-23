@@ -517,6 +517,16 @@ h1 {
   padding: 10px;
 }
 
+.image-card-selectable {
+  cursor: pointer;
+}
+
+.image-card-selectable:has(button.thumb:hover),
+.image-card-selectable:has(.card-actions button:hover),
+.image-card-selectable:has(input:hover) {
+  cursor: default;
+}
+
 .image-card-selected {
   border-color: color-mix(in srgb, Highlight 60%, CanvasText 14%);
   background: color-mix(in srgb, Highlight 9%, Canvas);

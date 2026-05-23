@@ -903,12 +903,31 @@ function renderMissingImageNotice(missingCount: number): HTMLElement {
 function renderImageCard(item: ImageMetadata): HTMLElement {
   const card = document.createElement("article");
   card.className = "image-card";
+  if (item.imageUrl) {
+    card.classList.add("image-card-selectable");
+  }
   if (selectedItemKeys.has(imageItemKey(item))) {
     card.classList.add("image-card-selected");
   }
 
+  card.addEventListener("click", (event) => {
+    if (!item.imageUrl || isCardSelectionIgnoredTarget(event.target)) {
+      return;
+    }
+
+    setItemSelected(item, !selectedItemKeys.has(imageItemKey(item)));
+  });
+
   card.append(renderThumbnail(item), renderImageMain(item));
   return card;
+}
+
+function isCardSelectionIgnoredTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return true;
+  }
+
+  return Boolean(target.closest("button, input, label, a, textarea, select"));
 }
 
 function renderThumbnail(item: ImageMetadata): HTMLElement {
