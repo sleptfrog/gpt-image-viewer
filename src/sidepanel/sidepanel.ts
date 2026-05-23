@@ -15,7 +15,20 @@ import {
   type ImageUrlRecord,
   type ImageUrlRecordStats
 } from "../shared/image-url-store";
-import { createZipArchive, type ZipFileEntry } from "../shared/zip";
+import { ZipBlobBuilder, type ZipFileEntry } from "../shared/zip";
+import {
+  createChatFolderName,
+  createFailureReportJson,
+  createFolderSaveFailure,
+  createFolderSaveFailureReport,
+  createFolderSaveRootName,
+  getUniqueDirectoryHandle,
+  getUniqueFileHandle,
+  writeFile,
+  type DirectoryHandleLike,
+  type FolderSaveFailure,
+  type PreparedFolderFile
+} from "./folder-save";
 import { getMessages, type LoadedStatusInput, type MessageCatalog } from "./messages";
 
 type IconName = "refresh" | "save" | "copy" | "export" | "import" | "trash" | "scroll";
@@ -71,6 +84,7 @@ const conversationIdEl = queryRequired<HTMLSpanElement>("#conversation-id");
 const contentEl = queryRequired<HTMLElement>("#content");
 const refreshButton = queryRequired<HTMLButtonElement>("#refresh");
 const imagePageScrollButton = queryRequired<HTMLButtonElement>("#image-page-scroll");
+const saveImportedImagesButton = queryRequired<HTMLButtonElement>("#save-imported-images");
 const toolbarViewGroup = queryRequired<HTMLElement>(".toolbar-view");
 const activityStatusEl = queryRequired<HTMLElement>("#activity-status");
 const dataDetailsEl = queryRequired<HTMLDetailsElement>("#data-details");
@@ -81,6 +95,8 @@ const selectionSummaryEl = queryRequired<HTMLSpanElement>("#selection-summary");
 const selectionToggleButton = queryRequired<HTMLButtonElement>("#selection-toggle");
 const downloadSelectedButton = queryRequired<HTMLButtonElement>("#download-selected");
 const moreActionsMenu = queryRequired<HTMLDetailsElement>("#more-actions");
+const moreActionsPanel = queryRequired<HTMLElement>(".toolbar-menu-panel");
+const saveImportedImagesMenuButton = queryRequired<HTMLButtonElement>("#save-imported-images-menu");
 const exportJsonButton = queryRequired<HTMLButtonElement>("#export-json");
 const exportDictionaryButton = queryRequired<HTMLButtonElement>("#export-dictionary");
 const importDictionaryButton = queryRequired<HTMLButtonElement>("#import-dictionary");
@@ -90,6 +106,9 @@ const downloadProgress = queryRequired<HTMLElement>("#download-progress");
 const downloadProgressLabel = queryRequired<HTMLSpanElement>("#download-progress-label");
 const downloadProgressCount = queryRequired<HTMLSpanElement>("#download-progress-count");
 const downloadProgressBar = queryRequired<HTMLProgressElement>("#download-progress-bar");
+const cancelFolderSaveButton = queryRequired<HTMLButtonElement>("#cancel-folder-save");
+const folderSaveFailures = queryRequired<HTMLElement>("#folder-save-failures");
+const folderSaveFailureList = queryRequired<HTMLOListElement>("#folder-save-failure-list");
 const clearDictionaryDialog = queryRequired<HTMLDialogElement>("#clear-dictionary-dialog");
 const downloadAllDialog = queryRequired<HTMLDialogElement>("#download-all-dialog");
 const downloadAllMessage = queryRequired<HTMLParagraphElement>("#download-all-message");
@@ -121,6 +140,7 @@ let showUserAttachments = false;
 let isPanelBusy = false;
 let toolbarMode: ToolbarMode = "other";
 let isImagePageAutoScrollRunning = false;
+let folderSaveAbortController: AbortController | undefined;
 let loadSequence = 0;
 let autoRefreshTimer: number | undefined;
 let pendingLoadOptions: LoadOptions = {};
@@ -186,6 +206,8 @@ function resolveMessagePath(catalog: MessageCatalog, path: string | undefined): 
 function applyButtonIcons(): void {
   decorateButton(refreshButton, "refresh");
   decorateButton(imagePageScrollButton, "scroll");
+  decorateButton(saveImportedImagesButton, "save");
+  decorateButton(saveImportedImagesMenuButton, "save");
   decorateButton(downloadSelectedButton, "save");
   decorateButton(exportJsonButton, "export");
   decorateButton(exportDictionaryButton, "export");
@@ -302,6 +324,24 @@ function setToolbarMode(mode: ToolbarMode): void {
   updateToolbarControls();
 }
 
+function positionMoreActionsMenu(): void {
+  if (!moreActionsMenu.open) {
+    moreActionsPanel.style.left = "";
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    const margin = 8;
+    const menuRect = moreActionsMenu.getBoundingClientRect();
+    const summaryRect = moreActionsMenu.querySelector("summary")?.getBoundingClientRect() ?? menuRect;
+    const panelWidth = moreActionsPanel.offsetWidth;
+    const maxLeft = Math.max(margin, window.innerWidth - panelWidth - margin);
+    const desiredLeft = summaryRect.left + summaryRect.width / 2 - panelWidth / 2;
+    const viewportLeft = Math.min(Math.max(desiredLeft, margin), maxLeft);
+    moreActionsPanel.style.left = `${viewportLeft - menuRect.left}px`;
+  });
+}
+
 function updateToolbarControls(): void {
   const isConversationPage = toolbarMode === "conversation";
   const isImagesPage = toolbarMode === "images";
@@ -309,19 +349,61 @@ function updateToolbarControls(): void {
   refreshButton.hidden = !isConversationPage;
   toolbarViewGroup.hidden = !isConversationPage;
   imagePageScrollButton.hidden = !isImagesPage && !isImagePageAutoScrollRunning;
+  saveImportedImagesButton.hidden = !isImagesPage;
+  saveImportedImagesMenuButton.hidden = isImagesPage;
   imagePageScrollButton.disabled = (!isImagesPage && !isImagePageAutoScrollRunning) || (isPanelBusy && !isImagePageAutoScrollRunning);
+  saveImportedImagesButton.disabled = isPanelBusy;
+  saveImportedImagesMenuButton.disabled = isPanelBusy;
   imagePageScrollButton.textContent = isImagePageAutoScrollRunning
     ? messages.ui.buttons.stopImagePageScroll
     : messages.ui.buttons.startImagePageScroll;
   decorateButton(imagePageScrollButton, "scroll");
+  positionMoreActionsMenu();
 }
 
 function hideDownloadProgress(): void {
   downloadProgress.hidden = true;
+  cancelFolderSaveButton.hidden = true;
+  cancelFolderSaveButton.disabled = false;
   downloadProgressLabel.textContent = "";
   downloadProgressCount.textContent = "";
   downloadProgressBar.value = 0;
   downloadProgressBar.max = 1;
+}
+
+function showFolderSaveCancel(): void {
+  cancelFolderSaveButton.hidden = false;
+  cancelFolderSaveButton.disabled = false;
+}
+
+function hideFolderSaveFailures(): void {
+  folderSaveFailures.hidden = true;
+  folderSaveFailureList.replaceChildren();
+}
+
+function renderFolderSaveFailures(failures: FolderSaveFailure[]): void {
+  if (failures.length === 0) {
+    hideFolderSaveFailures();
+    return;
+  }
+
+  const visibleFailures = failures.slice(0, 20);
+  folderSaveFailureList.replaceChildren(
+    ...visibleFailures.map((failure) => {
+      const item = document.createElement("li");
+      const identity = failure.imageId ?? failure.messageId ?? failure.conversationId ?? messages.labels.image;
+      item.textContent = `${identity}: ${failure.reason}`;
+      return item;
+    })
+  );
+
+  if (failures.length > visibleFailures.length) {
+    const item = document.createElement("li");
+    item.textContent = messages.status.folderSaveFailureListTruncated(failures.length - visibleFailures.length);
+    folderSaveFailureList.append(item);
+  }
+
+  folderSaveFailures.hidden = false;
 }
 
 function updateDownloadProgress(label: string, completed: number, total: number): void {
@@ -340,6 +422,7 @@ async function loadCurrentConversation(options: LoadOptions = {}): Promise<void>
   setToolbarMode("other");
   setBusy(true);
   hideDownloadProgress();
+  hideFolderSaveFailures();
   currentItems = [];
   currentPreviewUrls = new Map();
   currentChatDataSummary = undefined;
@@ -730,6 +813,9 @@ function setBusy(isBusy: boolean): void {
   isPanelBusy = isBusy;
   refreshButton.disabled = isBusy;
   showAttachmentsToggle.disabled = isBusy;
+  cancelFolderSaveButton.disabled = !folderSaveAbortController;
+  saveImportedImagesButton.disabled = isBusy;
+  saveImportedImagesMenuButton.disabled = isBusy;
   updateSelectionControls(isBusy);
   exportJsonButton.disabled = isBusy || getVisibleItems().length === 0;
   exportDictionaryButton.disabled = isBusy;
@@ -1274,6 +1360,186 @@ async function downloadSelectedImages(): Promise<void> {
   await downloadImagesAsZip(getSelectedDownloadableItems());
 }
 
+async function downloadImportedImages(): Promise<void> {
+  const showDirectoryPicker = getShowDirectoryPicker();
+  if (!showDirectoryPicker) {
+    setActivityStatus(messages.status.folderSaveUnsupported);
+    return;
+  }
+
+  const records = await loadImageUrlRecords();
+  const sourceItems = sortItems([...records.values()].map(imageUrlRecordToMetadata));
+  const items = sourceItems.filter((item) => item.imageUrl);
+  const skipped = sourceItems.length - items.length;
+
+  if (items.length === 0) {
+    setActivityStatus(messages.status.noImportedImagesToSave);
+    return;
+  }
+
+  const conversationTitles = await loadConversationTitleMap(items);
+  const conversationCount = new Set(items.map((item) => createChatFolderName(item, conversationTitles))).size;
+  const selectedDirectory = await confirmImportedImagesDirectory(items.length, skipped, conversationCount, showDirectoryPicker);
+  if (!selectedDirectory) {
+    return;
+  }
+
+  const startedAt = new Date().toISOString();
+  const root = await getUniqueDirectoryHandle(selectedDirectory, createFolderSaveRootName(startedAt, locale === "ja" ? "jst" : "utc"));
+  const folderHandles = new Map<string, DirectoryHandleLike>();
+  const failures: FolderSaveFailure[] = [];
+  const controller = new AbortController();
+  folderSaveAbortController = controller;
+  setBusy(true);
+  showFolderSaveCancel();
+  hideFolderSaveFailures();
+
+  let saved = 0;
+  let sidecars = 0;
+  let canceled = false;
+
+  try {
+    for (const [index, item] of items.entries()) {
+      if (controller.signal.aborted) {
+        canceled = true;
+        break;
+      }
+
+      const folderName = createChatFolderName(item, conversationTitles);
+      updateDownloadProgress(messages.progress.savingToFolder, index, items.length);
+      setActivityStatus(messages.status.folderSaveSaving(index + 1, items.length));
+
+      try {
+        const folderHandle = await getOrCreateFolderHandle(root.handle, folderName, folderHandles);
+        const prepared = await prepareImageDownload(item, controller.signal);
+        if (!prepared) {
+          failures.push(createFolderSaveFailure(item, messages.status.imageUrlMissing, { folder: folderName }));
+          continue;
+        }
+
+        const imageName = await writePreparedFolderFile(folderHandle, {
+          path: prepared.imageFile.path,
+          data: prepared.imageFile.data,
+          type: mimeTypeFromPath(prepared.imageFile.path)
+        });
+        saved += 1;
+
+        if (prepared.sidecarFile) {
+          await writePreparedFolderFile(folderHandle, {
+            path: prepared.sidecarFile.path,
+            data: prepared.sidecarFile.data,
+            type: "application/json"
+          });
+          sidecars += 1;
+        }
+
+        void imageName;
+      } catch (error) {
+        if (controller.signal.aborted) {
+          canceled = true;
+          break;
+        }
+        failures.push(createFolderSaveFailure(item, errorToMessage(error), { folder: folderName }));
+        console.warn("Failed to save imported image", error);
+      } finally {
+        updateDownloadProgress(messages.progress.savingToFolder, index + 1, items.length);
+      }
+    }
+
+    const reportFilename = failures.length > 0 ? await saveFailureReport(root.handle, failures, startedAt).catch((error: unknown) => {
+      console.warn("Failed to save folder save failure report", error);
+      setActivityStatus(messages.status.folderSaveFailureReportFailed);
+      return undefined;
+    }) : undefined;
+
+    renderFolderSaveFailures(failures);
+    const parts = [
+      canceled
+        ? messages.status.folderSaveCanceled(saved, failures.length, items.length)
+        : failures.length > 0
+          ? messages.status.folderSaveCompletedWithFailures(saved, failures.length, items.length)
+          : messages.status.folderSaveCompleted(saved, items.length)
+    ];
+    if (sidecars > 0) {
+      parts.push(messages.labels.fieldLine(messages.labels.jsonIncluded, String(sidecars)));
+    }
+    if (skipped > 0) {
+      parts.push(messages.status.zipSkippedMissing(skipped));
+    }
+    if (reportFilename) {
+      parts.push(messages.status.folderSaveFailureReportSaved(reportFilename));
+    }
+    updateDownloadProgress(messages.progress.downloadStarted, items.length, items.length);
+    setActivityStatus(parts.join(locale === "ja" ? "、" : ", "));
+  } finally {
+    folderSaveAbortController = undefined;
+    cancelFolderSaveButton.hidden = true;
+    setBusy(false);
+  }
+}
+
+async function loadConversationTitleMap(items: ImageMetadata[]): Promise<Map<string, string>> {
+  const conversationIds = [...new Set(items.map((item) => item.conversationId).filter((id): id is string => Boolean(id)))];
+  const titles = new Map<string, string>();
+
+  await Promise.all(
+    conversationIds.map(async (conversationId) => {
+      const snapshot = await loadCapturedConversation(conversationId).catch(() => undefined);
+      if (snapshot?.conversationTitle) {
+        titles.set(conversationId, snapshot.conversationTitle);
+      }
+    })
+  );
+
+  return titles;
+}
+
+function imageUrlRecordToMetadata(record: ImageUrlRecord): ImageMetadata {
+  return stripRawMetadata({
+    source: "chatgpt-web",
+    conversationId: record.conversationId,
+    messageId: record.messageId ?? record.recentItemId ?? record.generationId,
+    imageId: record.imageId,
+    imageUrl: record.imageUrl,
+    prompt: record.prompt,
+    caption: record.caption ?? record.title,
+    imageRole: record.source === "recent-image-gen" ? "generated" : "unknown",
+    createdAt: record.createdAt,
+    capturedAt: record.capturedAt
+  });
+}
+
+async function getOrCreateFolderHandle(
+  rootHandle: DirectoryHandleLike,
+  folderName: string,
+  folderHandles: Map<string, DirectoryHandleLike>
+): Promise<DirectoryHandleLike> {
+  const existing = folderHandles.get(folderName);
+  if (existing) {
+    return existing;
+  }
+
+  const handle = await rootHandle.getDirectoryHandle(folderName, { create: true });
+  folderHandles.set(folderName, handle);
+  return handle;
+}
+
+async function writePreparedFolderFile(parent: DirectoryHandleLike, file: PreparedFolderFile): Promise<string> {
+  const { handle, name } = await getUniqueFileHandle(parent, file.path);
+  await writeFile(handle, file);
+  return name;
+}
+
+async function saveFailureReport(rootHandle: DirectoryHandleLike, failures: FolderSaveFailure[], startedAt: string): Promise<string> {
+  const filename = `gpt-image-viewer-failures-${formatTimestampForFilename(startedAt)}.json`;
+  const report = createFolderSaveFailureReport(failures, new Date().toISOString());
+  return await writePreparedFolderFile(rootHandle, {
+    path: filename,
+    data: utf8Bytes(createFailureReportJson(report)),
+    type: "application/json"
+  });
+}
+
 async function downloadImagesAsZip(sourceItems: ImageMetadata[]): Promise<void> {
   const items = sourceItems.filter((item) => item.imageUrl);
   const skipped = sourceItems.length - items.length;
@@ -1289,7 +1555,8 @@ async function downloadImagesAsZip(sourceItems: ImageMetadata[]): Promise<void> 
   setBusy(true);
   let sidecars = 0;
   let failed = 0;
-  const files: ZipFileEntry[] = [];
+  const zipBuilder = new ZipBlobBuilder();
+  const zipEntryCounts = new Map<string, number>();
 
   try {
     for (const [index, item] of items.entries()) {
@@ -1302,9 +1569,9 @@ async function downloadImagesAsZip(sourceItems: ImageMetadata[]): Promise<void> 
           continue;
         }
 
-        files.push(prepared.imageFile);
+        zipBuilder.addFile(dedupeZipEntry(prepared.imageFile, zipEntryCounts));
         if (prepared.sidecarFile) {
-          files.push(prepared.sidecarFile);
+          zipBuilder.addFile(dedupeZipEntry(prepared.sidecarFile, zipEntryCounts));
           sidecars += 1;
         }
       } catch (error) {
@@ -1315,16 +1582,15 @@ async function downloadImagesAsZip(sourceItems: ImageMetadata[]): Promise<void> 
       }
     }
 
-    if (files.length === 0) {
+    if (zipBuilder.fileCount === 0) {
       updateDownloadProgress(messages.progress.noZipFiles, items.length, items.length);
       setActivityStatus(messages.status.noZipFiles);
       return;
     }
 
     updateDownloadProgress(messages.progress.creatingZip, items.length, items.length);
-    const zipBytes = createZipArchive(dedupeZipEntries(files));
     const zipFilename = `GPT Image Viewer/${createZipBaseName()}.zip`;
-    await downloadBlob(new Blob([blobPartFromBytes(zipBytes)], { type: "application/zip" }), zipFilename);
+    await downloadBlob(zipBuilder.createBlob(), zipFilename);
 
     const downloadedImages = items.length - failed;
     const parts = [messages.status.zipSaved(downloadedImages, items.length)];
@@ -1344,12 +1610,12 @@ async function downloadImagesAsZip(sourceItems: ImageMetadata[]): Promise<void> 
   }
 }
 
-async function prepareImageDownload(item: ImageMetadata): Promise<PreparedImageDownload | undefined> {
+async function prepareImageDownload(item: ImageMetadata, signal?: AbortSignal): Promise<PreparedImageDownload | undefined> {
   if (!item.imageUrl) {
     return undefined;
   }
 
-  const response = await fetch(item.imageUrl, { credentials: "include" });
+  const response = await fetch(item.imageUrl, { credentials: "include", signal });
   if (!response.ok) {
     throw new Error(messages.errors.imageRequestFailed(response.status));
   }
@@ -1414,18 +1680,15 @@ function createSidecarJson(item: ImageMetadata, imageFilename: string, reason?: 
   return `${JSON.stringify(payload, null, 2)}\n`;
 }
 
-function dedupeZipEntries(files: ZipFileEntry[]): ZipFileEntry[] {
-  const counts = new Map<string, number>();
-  return files.map((file) => {
-    const count = counts.get(file.path) ?? 0;
-    counts.set(file.path, count + 1);
-    if (count === 0) {
-      return file;
-    }
+function dedupeZipEntry(file: ZipFileEntry, counts: Map<string, number>): ZipFileEntry {
+  const count = counts.get(file.path) ?? 0;
+  counts.set(file.path, count + 1);
+  if (count === 0) {
+    return file;
+  }
 
-    const path = file.path.replace(/(\.[^./]+)?$/, `-${count + 1}$1`);
-    return { ...file, path };
-  });
+  const path = file.path.replace(/(\.[^./]+)?$/, `-${count + 1}$1`);
+  return { ...file, path };
 }
 
 function createZipBaseName(): string {
@@ -1580,7 +1843,99 @@ function confirmClearDictionary(): Promise<boolean> {
 function confirmDownloadZip(imageCount: number, skippedCount: number): Promise<boolean> {
   const skippedText = skippedCount > 0 ? messages.confirm.skippedMissingImages(skippedCount) : "";
   downloadAllMessage.textContent = messages.confirm.zipMessage(imageCount, skippedText);
+  confirmDownloadZipButton().textContent = messages.ui.buttons.saveZip;
+  decorateButton(confirmDownloadZipButton(), "save");
   return confirmDialog(downloadAllDialog, messages.confirm.zipFallback(imageCount));
+}
+
+function confirmImportedImagesDirectory(
+  imageCount: number,
+  skippedCount: number,
+  conversationCount: number,
+  showDirectoryPicker: () => Promise<DirectoryHandleLike>
+): Promise<DirectoryHandleLike | undefined> {
+  downloadAllMessage.textContent = messages.confirm.importedImagesFolderMessage(imageCount, skippedCount, conversationCount);
+
+  if (typeof downloadAllDialog.showModal !== "function") {
+    if (!confirm(messages.confirm.importedImagesFolderFallback(imageCount))) {
+      return Promise.resolve(undefined);
+    }
+    return showDirectoryPicker().catch(() => undefined);
+  }
+
+  if (downloadAllDialog.open) {
+    return Promise.resolve(undefined);
+  }
+
+  const confirmButton = confirmDownloadZipButton();
+  const previousText = confirmButton.textContent;
+  confirmButton.textContent = messages.ui.buttons.chooseFolder;
+  decorateButton(confirmButton, "save");
+
+  return new Promise((resolve) => {
+    let settled = false;
+
+    function cleanup(): void {
+      confirmButton.textContent = previousText ?? messages.ui.buttons.saveZip;
+      confirmButton.disabled = false;
+      confirmButton.removeEventListener("click", handleConfirmClick);
+      downloadAllDialog.removeEventListener("close", handleClose);
+      decorateButton(confirmButton, "save");
+    }
+
+    function finish(handle: DirectoryHandleLike | undefined): void {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      resolve(handle);
+    }
+
+    function handleClose(): void {
+      finish(undefined);
+    }
+
+    function handleConfirmClick(event: MouseEvent): void {
+      event.preventDefault();
+      event.stopPropagation();
+      confirmButton.disabled = true;
+      void showDirectoryPicker()
+        .then((handle) => {
+          downloadAllDialog.removeEventListener("close", handleClose);
+          downloadAllDialog.returnValue = "confirm";
+          downloadAllDialog.close();
+          finish(handle);
+        })
+        .catch(() => {
+          downloadAllDialog.removeEventListener("close", handleClose);
+          downloadAllDialog.returnValue = "cancel";
+          downloadAllDialog.close();
+          finish(undefined);
+        });
+    }
+
+    downloadAllDialog.returnValue = "cancel";
+    confirmButton.addEventListener("click", handleConfirmClick);
+    downloadAllDialog.addEventListener("close", handleClose);
+    downloadAllDialog.showModal();
+  });
+}
+
+function getShowDirectoryPicker(): (() => Promise<DirectoryHandleLike>) | undefined {
+  const candidate = (window as Window & {
+    showDirectoryPicker?: (options?: { id?: string; mode?: "read" | "readwrite" }) => Promise<DirectoryHandleLike>;
+  }).showDirectoryPicker;
+
+  if (typeof candidate !== "function") {
+    return undefined;
+  }
+
+  return () => candidate.call(window, { id: "gpt-image-viewer-bulk-save", mode: "readwrite" });
+}
+
+function errorToMessage(error: unknown): string {
+  return error instanceof Error ? error.message : messages.errors.unknown;
 }
 
 function confirmDialog(dialog: HTMLDialogElement, fallbackMessage: string): Promise<boolean> {
@@ -1841,8 +2196,27 @@ function formatTimestampForFilename(iso: string): string {
   return iso.replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
 }
 
+moreActionsMenu.addEventListener("toggle", positionMoreActionsMenu);
+window.addEventListener("resize", positionMoreActionsMenu);
+
 imagePageScrollButton.addEventListener("click", () => {
   void toggleImagePageAutoScroll();
+});
+
+function handleImportedImagesDownloadClick(): void {
+  moreActionsMenu.open = false;
+  void downloadImportedImages().catch((error: unknown) => {
+    setActivityStatus(messages.status.importedImagesSaveFailed);
+    console.warn("Failed to download imported images", error);
+  });
+}
+
+saveImportedImagesButton.addEventListener("click", handleImportedImagesDownloadClick);
+saveImportedImagesMenuButton.addEventListener("click", handleImportedImagesDownloadClick);
+cancelFolderSaveButton.addEventListener("click", () => {
+  cancelFolderSaveButton.disabled = true;
+  folderSaveAbortController?.abort();
+  setActivityStatus(messages.status.folderSaveCanceling);
 });
 
 refreshButton.addEventListener("click", () => {

@@ -49,6 +49,17 @@ export type MessageCatalog = {
     textCopied: (label: string) => string;
     textCopyFailed: (label: string) => string;
     noSelectedImagesToSave: string;
+    noImportedImagesToSave: string;
+    importedImagesSaveFailed: string;
+    folderSaveUnsupported: string;
+    folderSaveCanceling: string;
+    folderSaveSaving: (current: number, total: number) => string;
+    folderSaveCompleted: (saved: number, total: number) => string;
+    folderSaveCompletedWithFailures: (saved: number, failed: number, total: number) => string;
+    folderSaveCanceled: (saved: number, failed: number, total: number) => string;
+    folderSaveFailureReportSaved: (filename: string) => string;
+    folderSaveFailureReportFailed: string;
+    folderSaveFailureListTruncated: (count: number) => string;
     zipPreparing: (current: number, total: number) => string;
     noZipFiles: string;
     zipSaved: (downloaded: number, total: number) => string;
@@ -87,6 +98,7 @@ export type MessageCatalog = {
   progress: {
     preparingImages: string;
     creatingZip: string;
+    savingToFolder: string;
     noZipFiles: string;
     downloadStarted: string;
   };
@@ -95,6 +107,8 @@ export type MessageCatalog = {
     skippedMissingImages: (count: number) => string;
     zipMessage: (count: number, skippedText: string) => string;
     zipFallback: (count: number) => string;
+    importedImagesFolderMessage: (count: number, skippedCount: number, conversationCount: number) => string;
+    importedImagesFolderFallback: (count: number) => string;
     clearDictionaryFallback: string;
   };
   viewer: {
@@ -142,6 +156,7 @@ export type MessageCatalog = {
       refresh: string;
       startImagePageScroll: string;
       stopImagePageScroll: string;
+      saveAllImportedImages: string;
       exportJson: string;
       exportDictionary: string;
       importDictionary: string;
@@ -153,6 +168,8 @@ export type MessageCatalog = {
       cancel: string;
       clearAll: string;
       saveZip: string;
+      chooseFolder: string;
+      cancelSave: string;
       copy: string;
       copyImage: string;
     };
@@ -179,6 +196,7 @@ export type MessageCatalog = {
     copyUserInput: string;
     copyCaption: string;
     copyPrompt: string;
+    folderSaveFailuresTitle: string;
   };
 };
 
@@ -229,6 +247,17 @@ const jaMessages: MessageCatalog = {
     textCopied: (label) => `${label}をコピーしました`,
     textCopyFailed: (label) => `${label}のコピーに失敗しました`,
     noSelectedImagesToSave: "保存できる選択画像がありません",
+    noImportedImagesToSave: "一括保存できる取り込み済み画像がありません",
+    importedImagesSaveFailed: "取り込み済み画像の一括保存に失敗しました",
+    folderSaveUnsupported: "この環境ではフォルダ保存を利用できません",
+    folderSaveCanceling: "保存をキャンセルしています",
+    folderSaveSaving: (current, total) => `保存中 ${current}/${total}`,
+    folderSaveCompleted: (saved, total) => `${saved}/${total}件をフォルダに保存しました`,
+    folderSaveCompletedWithFailures: (saved, failed, total) => `${saved}/${total}件を保存しました（失敗 ${failed}件）`,
+    folderSaveCanceled: (saved, failed, total) => `保存をキャンセルしました（保存 ${saved}/${total}件、失敗 ${failed}件）`,
+    folderSaveFailureReportSaved: (filename) => `失敗レポートを保存しました: ${filename}`,
+    folderSaveFailureReportFailed: "失敗レポートの保存に失敗しました",
+    folderSaveFailureListTruncated: (count) => `ほか ${count}件の失敗があります`,
     zipPreparing: (current, total) => `ZIPを準備中 ${current}/${total}`,
     noZipFiles: "ZIPに追加できる画像がありませんでした",
     zipSaved: (downloaded, total) => `${downloaded}/${total}件をZIPで保存しました`,
@@ -268,6 +297,7 @@ const jaMessages: MessageCatalog = {
   progress: {
     preparingImages: "画像を準備中",
     creatingZip: "ZIPを作成中",
+    savingToFolder: "フォルダに保存中",
     noZipFiles: "ZIPに追加できる画像がありません",
     downloadStarted: "保存を開始しました"
   },
@@ -276,6 +306,17 @@ const jaMessages: MessageCatalog = {
     skippedMissingImages: (count) => ` 画像未取得の ${count}件はスキップされます。`,
     zipMessage: (count, skippedText) => `選択した画像 ${count}件を1つのZIPファイルとして保存します。${skippedText}`,
     zipFallback: (count) => `選択した画像 ${count}件をZIPで保存しますか？`,
+    importedImagesFolderMessage: (count, skippedCount, conversationCount) =>
+      [
+        `保存対象: ${count}件（${conversationCount}フォルダ）`,
+        "画像URL辞書に取り込み済みの画像のみです。未取り込み分はChatGPTの「画像」ページで取り込んでください。",
+        "※URLの期限切れなどで一部失敗することがあります。",
+        "※ファイルサイズは数GBから数十GBになる場合があり、保存には時間がかかります。",
+        skippedCount > 0 ? `画像URLがない ${skippedCount}件は対象外です。` : ""
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    importedImagesFolderFallback: (count) => `取り込み済み辞書の画像 ${count}件をフォルダに保存しますか？`,
     clearDictionaryFallback: "このブラウザセッションの画像URL辞書を全削除しますか？"
   },
   viewer: {
@@ -323,6 +364,7 @@ const jaMessages: MessageCatalog = {
       refresh: "更新",
       startImagePageScroll: "画像データ自動取り込み",
       stopImagePageScroll: "停止",
+      saveAllImportedImages: "一括保存",
       exportJson: "メタデータJSONを書き出し",
       exportDictionary: "辞書を書き出し",
       importDictionary: "辞書を読み込み",
@@ -334,6 +376,8 @@ const jaMessages: MessageCatalog = {
       cancel: "キャンセル",
       clearAll: "全削除",
       saveZip: "ZIPを保存",
+      chooseFolder: "保存先を選択",
+      cancelSave: "キャンセル",
       copy: "コピー",
       copyImage: "画像をコピー"
     },
@@ -370,7 +414,8 @@ const jaMessages: MessageCatalog = {
     nextImage: "次の画像",
     copyUserInput: "ユーザー入力をコピー",
     copyCaption: "キャプションをコピー",
-    copyPrompt: "生成プロンプトをコピー"
+    copyPrompt: "生成プロンプトをコピー",
+    folderSaveFailuresTitle: "保存に失敗した画像"
   }
 };
 
@@ -421,6 +466,17 @@ const enMessages: MessageCatalog = {
     textCopied: (label) => `Copied ${label}`,
     textCopyFailed: (label) => `Failed to copy ${label}`,
     noSelectedImagesToSave: "No selected images can be saved",
+    noImportedImagesToSave: "No imported images can be saved",
+    importedImagesSaveFailed: "Failed to save imported images",
+    folderSaveUnsupported: "Folder saving is not available in this environment",
+    folderSaveCanceling: "Canceling save",
+    folderSaveSaving: (current, total) => `Saving ${current}/${total}`,
+    folderSaveCompleted: (saved, total) => `Saved ${saved}/${total} images to the folder`,
+    folderSaveCompletedWithFailures: (saved, failed, total) => `Saved ${saved}/${total} images (${failed} failed)`,
+    folderSaveCanceled: (saved, failed, total) => `Save canceled (${saved}/${total} saved, ${failed} failed)`,
+    folderSaveFailureReportSaved: (filename) => `Saved failure report: ${filename}`,
+    folderSaveFailureReportFailed: "Failed to save the failure report",
+    folderSaveFailureListTruncated: (count) => `${formatCount(count, "more failure")} not shown`,
     zipPreparing: (current, total) => `Preparing ZIP ${current}/${total}`,
     noZipFiles: "No images could be added to the ZIP",
     zipSaved: (downloaded, total) => `Saved ${downloaded}/${total} images as a ZIP`,
@@ -460,6 +516,7 @@ const enMessages: MessageCatalog = {
   progress: {
     preparingImages: "Preparing images",
     creatingZip: "Creating ZIP",
+    savingToFolder: "Saving to folder",
     noZipFiles: "No images can be added to the ZIP",
     downloadStarted: "Save started"
   },
@@ -468,6 +525,17 @@ const enMessages: MessageCatalog = {
     skippedMissingImages: (count) => ` ${formatCount(count, "missing image")} will be skipped.`,
     zipMessage: (count, skippedText) => `Save ${formatCount(count, "selected image")} as one ZIP file.${skippedText}`,
     zipFallback: (count) => `Save ${formatCount(count, "selected image")} as a ZIP file?`,
+    importedImagesFolderMessage: (count, skippedCount, conversationCount) =>
+      [
+        `Files: ${formatCount(count, "image")} (${formatCount(conversationCount, "folder")})`,
+        "Scope: Only images imported into the image URL dictionary are included. Import missing images from ChatGPT's Images page first.",
+        "Note: Some images may fail if their URLs have expired.",
+        "Size: This may be several GB to tens of GB and can take a long time.",
+        skippedCount > 0 ? `${formatCount(skippedCount, "entry")} without an image URL will be skipped.` : ""
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    importedImagesFolderFallback: (count) => `Save ${formatCount(count, "imported image")} to a folder?`,
     clearDictionaryFallback: "Clear the image URL dictionary for this browser session?"
   },
   viewer: {
@@ -515,6 +583,7 @@ const enMessages: MessageCatalog = {
       refresh: "Refresh",
       startImagePageScroll: "Auto import image data",
       stopImagePageScroll: "Stop",
+      saveAllImportedImages: "Save all",
       exportJson: "Export metadata JSON",
       exportDictionary: "Export dictionary",
       importDictionary: "Import dictionary",
@@ -526,6 +595,8 @@ const enMessages: MessageCatalog = {
       cancel: "Cancel",
       clearAll: "Clear all",
       saveZip: "Save ZIP",
+      chooseFolder: "Choose folder",
+      cancelSave: "Cancel",
       copy: "Copy",
       copyImage: "Copy image"
     },
@@ -562,7 +633,8 @@ const enMessages: MessageCatalog = {
     nextImage: "Next image",
     copyUserInput: "Copy user input",
     copyCaption: "Copy caption",
-    copyPrompt: "Copy generation prompt"
+    copyPrompt: "Copy generation prompt",
+    folderSaveFailuresTitle: "Failed images"
   }
 };
 

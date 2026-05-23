@@ -33,6 +33,45 @@ export function createZipArchive(files: ZipFileEntry[]): Uint8Array {
   return concatBytes(...localParts, centralDirectory, end);
 }
 
+export function createZipBlob(files: ZipFileEntry[]): Blob {
+  const builder = new ZipBlobBuilder();
+  for (const file of files) {
+    builder.addFile(file);
+  }
+  return builder.createBlob();
+}
+
+export class ZipBlobBuilder {
+  private readonly localParts: BlobPart[] = [];
+  private readonly centralParts: BlobPart[] = [];
+  private localOffset = 0;
+  private centralDirectorySize = 0;
+  private count = 0;
+
+  get fileCount(): number {
+    return this.count;
+  }
+
+  addFile(file: ZipFileEntry): void {
+    const pathBytes = utf8Bytes(normalizeZipPath(file.path));
+    const crc = crc32(file.data);
+    const { dosDate, dosTime } = dateToDos(file.modifiedAt ?? new Date());
+    const localHeader = createLocalFileHeader(pathBytes, file.data, crc, dosDate, dosTime);
+    const centralHeader = createCentralDirectoryHeader(pathBytes, file.data, crc, dosDate, dosTime, this.localOffset);
+
+    this.localParts.push(blobPartFromBytes(localHeader), blobPartFromBytes(file.data));
+    this.centralParts.push(blobPartFromBytes(centralHeader));
+    this.localOffset += localHeader.length + file.data.length;
+    this.centralDirectorySize += centralHeader.length;
+    this.count += 1;
+  }
+
+  createBlob(): Blob {
+    const end = createEndOfCentralDirectory(this.count, this.centralDirectorySize, this.localOffset);
+    return new Blob([...this.localParts, ...this.centralParts, blobPartFromBytes(end)], { type: "application/zip" });
+  }
+}
+
 function createLocalFileHeader(
   pathBytes: Uint8Array,
   data: Uint8Array,
@@ -170,4 +209,9 @@ function createCrcTable(): Uint32Array {
     table[i] = value >>> 0;
   }
   return table;
+}
+
+function blobPartFromBytes(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes);
+  return copy.buffer;
 }

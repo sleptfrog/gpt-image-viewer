@@ -48,9 +48,11 @@
         <div class="toolbar-group toolbar-global" aria-label="Global actions" data-i18n-aria-label="ui.globalActions">
           <button id="refresh" class="toolbar-button" type="button" data-i18n="ui.buttons.refresh">Refresh</button>
           <button id="image-page-scroll" class="toolbar-button" type="button" data-i18n="ui.buttons.startImagePageScroll" hidden>Read images page</button>
+          <button id="save-imported-images" class="toolbar-button toolbar-primary" type="button" data-i18n="ui.buttons.saveAllImportedImages" hidden>Save all</button>
           <details id="more-actions" class="toolbar-menu">
             <summary aria-label="More actions" title="More actions" data-i18n-aria-label="ui.moreActions" data-i18n-title="ui.moreActions">⋮</summary>
             <div class="toolbar-menu-panel">
+              <button id="save-imported-images-menu" class="toolbar-primary" type="button" data-i18n="ui.buttons.saveAllImportedImages">Save all</button>
               <button id="export-json" type="button" disabled data-i18n="ui.buttons.exportJson">Export metadata JSON</button>
               <button id="export-dictionary" type="button" data-i18n="ui.buttons.exportDictionary">Export dictionary</button>
               <button id="import-dictionary" type="button" data-i18n="ui.buttons.importDictionary">Import dictionary</button>
@@ -81,8 +83,14 @@
         <div class="download-progress-row">
           <span id="download-progress-label" data-i18n="ui.preparing">Preparing</span>
           <span id="download-progress-count"></span>
+          <button id="cancel-folder-save" type="button" data-i18n="ui.buttons.cancelSave" hidden>Cancel</button>
         </div>
         <progress id="download-progress-bar" value="0" max="1"></progress>
+      </section>
+
+      <section id="folder-save-failures" class="folder-save-failures" hidden>
+        <h2 data-i18n="ui.folderSaveFailuresTitle">Failed images</h2>
+        <ol id="folder-save-failure-list"></ol>
       </section>
 
       <section id="content" class="content" aria-label="Image list" data-i18n-aria-label="ui.contentList"></section>
@@ -109,7 +117,7 @@
         </p>
         <div class="confirm-dialog-actions">
           <button type="submit" value="cancel" data-i18n="ui.buttons.cancel">Cancel</button>
-          <button id="confirm-download-all" type="submit" value="confirm" data-i18n="ui.buttons.saveZip">Save ZIP</button>
+          <button id="confirm-download-all" class="toolbar-primary" type="submit" value="confirm" data-i18n="ui.buttons.saveZip">Save ZIP</button>
         </div>
       </form>
     </dialog>

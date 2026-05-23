@@ -16,6 +16,7 @@ This is not an official ChatGPT or OpenAI product. It depends on ChatGPT Web UI 
 - ビューア内で前後移動、画像コピー、ユーザー入力/キャプション/生成プロンプトコピー、保存が可能
 - 会話内のユーザー添付画像を初期状態で非表示にし、必要に応じて表示を切り替え可能
 - 選択した画像をZIPで保存
+- 画像URL辞書に取り込み済みの画像を、ユーザーが選択したローカルフォルダへチャット名またはチャットIDごとに一括保存
 - PNG/JPEG/WebPにメタデータを埋め込み、埋め込みできない場合はsidecar JSONを同梱
 - ChatGPTの「画像」ページで読み込まれた画像URLを辞書として取り込み、チャット上では表示されていない過去画像の表示にも利用
 - 画像ページ由来の辞書取り込み件数、チャット紐づき件数、最終取り込み時刻をサイドパネルに表示
@@ -29,6 +30,7 @@ English summary:
 - Provides a simple image viewer with previous/next navigation, image copy, metadata text copy, and save actions.
 - Hides user attachment images by default, with a toggle to show them when needed.
 - Saves selected images as a ZIP file.
+- Saves all images imported into the image URL dictionary into a user-selected local folder, grouped by chat title or chat ID.
 - Embeds metadata into PNG/JPEG/WebP when possible, and includes sidecar JSON when embedding is unavailable.
 - Imports image URLs loaded by ChatGPT's Images page into a local dictionary, which can help display older images that are not currently rendered in the chat.
 - Shows Images-page import counts, linked chat counts, and the latest import time in the side panel.
@@ -116,9 +118,9 @@ Then in Chrome:
 
 Images attached by the user in the chat are hidden by default. Turn on `Attachments` if you want to show them.
 
-画像未取得の項目がある場合は、ChatGPTの「画像」ページを開き、対象画像が表示されるまでスクロールしてください。ChatGPT自身が読み込んだ画像URLを拡張機能が辞書へ取り込みます。
+画像未取得の項目がある場合は、ChatGPTの「画像」ページを開き、対象画像が表示されるまでスクロールしてください。ChatGPT自身が読み込んだ画像URLを拡張機能が辞書へ取り込みます。画像ページでは、取り込み済み辞書内の画像を `一括保存` からユーザーが選択したローカルフォルダへ保存できます。
 
-If some items are shown as not loaded, open ChatGPT's Images page and scroll until the target images are visible. The extension imports image URLs that ChatGPT itself loads into the local dictionary.
+If some items are shown as not loaded, open ChatGPT's Images page and scroll until the target images are visible. The extension imports image URLs that ChatGPT itself loads into the local dictionary. On the Images page, use `Save all` to save imported dictionary images into a local folder you choose.
 
 ## 開発 / Development
 

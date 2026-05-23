@@ -33,7 +33,7 @@ GPT Image Viewer does not send user inputs, prompts, images, metadata, or conver
 
 ### Storage
 
-Metadata and image URL mappings may be stored temporarily in Chrome extension storage. Saved images and sidecar JSON files are stored locally only when the user chooses to save them.
+Metadata and image URL mappings may be stored temporarily in Chrome extension storage. Saved images and sidecar JSON files are stored locally only when the user chooses to save them. For bulk save, files are written only to the local folder selected by the user through the browser folder picker.
 
 Saved image files and sidecar JSON files may include user inputs, prompts, captions, conversation IDs, message IDs, image IDs, and image URLs. If the user shares those saved files, that metadata may also be shared.
 
@@ -80,7 +80,7 @@ GPT Image Viewer は、ユーザー入力、プロンプト、画像、メタデ
 
 ### 保存
 
-メタデータと画像URLの対応情報は、Chrome拡張機能のストレージに一時的に保存される場合があります。保存された画像とsidecar JSONファイルは、ユーザーが保存操作を行った場合にのみローカルに保存されます。
+メタデータと画像URLの対応情報は、Chrome拡張機能のストレージに一時的に保存される場合があります。保存された画像とsidecar JSONファイルは、ユーザーが保存操作を行った場合にのみローカルに保存されます。一括保存では、ブラウザのフォルダ選択でユーザーが選んだローカルフォルダにのみファイルを書き込みます。
 
 保存された画像ファイルやsidecar JSONファイルには、ユーザー入力、プロンプト、キャプション、conversation ID、message ID、image ID、画像URLが含まれる場合があります。ユーザーがそれらの保存物を共有した場合、これらのメタデータも共有される可能性があります。
 
